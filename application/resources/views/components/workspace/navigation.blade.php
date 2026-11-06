@@ -34,6 +34,10 @@
             <li><a href="{{ route('workspace.suppliers') }}" @class(['menu-active bg-secondary! text-secondary-content!' => $section === 'suppliers'])
                 @if ($section === 'suppliers') aria-current="page" @endif><x-ui.icon name="receipt" /> Suppliers</a></li>
         @endcan
+        @canany(['reports.view', 'reports.daily_own'])
+            <li><a href="{{ route('workspace.reports') }}" @class(['menu-active bg-secondary! text-secondary-content!' => $section === 'reports'])
+                @if ($section === 'reports') aria-current="page" @endif><x-ui.icon name="overview" /> {{ auth()->user()->can('reports.view') ? 'Reports' : 'My daily sales' }}</a></li>
+        @endcanany
         @can('users.manage')
             <li><a href="{{ route('workspace.admin', ['section' => 'staff']) }}"><x-ui.icon name="store" /> Administration</a></li>
         @endcan

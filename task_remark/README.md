@@ -35,6 +35,7 @@ Updated 6 November 2026. Source plan: [MILESTONES](../docs/MILESTONES.md).
 | task029 | M32 | POS cart and held bills | Complete | [Remark, tests and screenshots](M32/task029.md) |
 | task030 | M33 | Checkout and invoice printing | Complete | [Remark, tests and screenshots](M33/task030.md) |
 | task031 | M34 | Customer and supplier ledgers | Complete | [Remark, tests and screenshots](M34/task031.md) |
+| task032 | M35-R1 | Branch dashboard and basic reports | Complete | [Remark, tests and screenshots](M35/task032.md) |
 
 Use globally increasing task numbers. On completion, write scope, changed files, actual checks, limitations and next step in the milestone folder. Keep test evidence alongside remarks. Never store credentials or tokens. Passing partial checks do not complete a milestone. Commit each completed milestone or release slice after recording its verification.
 

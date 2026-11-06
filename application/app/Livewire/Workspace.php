@@ -62,6 +62,7 @@ final class Workspace extends Component
         abort_if($this->section === 'pos' && ! $actor->can('sales.create'), 403);
         abort_if($this->section === 'customers' && ! $actor->can('customers.view'), 403);
         abort_if($this->section === 'suppliers' && ! $actor->can('suppliers.manage'), 403);
+        abort_if($this->section === 'reports' && ! $actor->canAny(['reports.view', 'reports.daily_own']), 403);
 
         $today = CarbonImmutable::now('Asia/Kolkata')->startOfDay();
         $reports = app(OperationalReports::class);

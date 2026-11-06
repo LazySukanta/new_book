@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthenticationController;
 use App\Http\Controllers\CatalogueController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\SaleCorrectionController;
 use App\Http\Controllers\SaleReturnController;
@@ -50,6 +51,9 @@ Route::middleware(['auth:web', RequireDevice::class])->group(function () {
     Route::get('/workspace/pos/invoices/{branch}/credit-note/{return}', [WorkspacePosController::class, 'creditNote'])
         ->whereNumber(['branch', 'return'])->name('workspace.pos.credit-note');
     Route::view('/workspace/stock', 'workspace', ['section' => 'stock'])->name('workspace.stock');
+    Route::view('/workspace/reports', 'workspace', ['section' => 'reports'])->name('workspace.reports');
+    Route::get('/workspace/report-data/{report}', [ReportController::class, 'show'])
+        ->whereIn('report', ['dashboard', ...ReportController::TABLES])->middleware(ResolveBranch::class);
     Route::view('/workspace/customers', 'workspace', ['section' => 'customers'])->name('workspace.customers');
     Route::view('/workspace/suppliers', 'workspace', ['section' => 'suppliers'])->name('workspace.suppliers');
     Route::prefix('workspace/party-data')->group(function () {

@@ -14,6 +14,11 @@ use Illuminate\Validation\ValidationException;
 
 final class ReportController
 {
+    public const TABLES = [
+        'daily-sales', 'sales-by-product', 'sales-by-cashier', 'stock-valuation', 'low-stock',
+        'customer-outstanding', 'supplier-outstanding', 'payments', 'profit',
+    ];
+
     public function show(Request $request, OperationalReports $reports, string $report): JsonResponse
     {
         $actor = $request->user();

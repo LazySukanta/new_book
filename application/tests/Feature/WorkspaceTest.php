@@ -65,6 +65,10 @@ final class WorkspaceTest extends TestCase
         $this->actingAs($cashier)->get('/workspace/suppliers')->assertForbidden();
         $this->postJson($customerUrl.'/opening-entries', $opening, $headers + ['Idempotency-Key' => 'workspace-cashier-denied'])->assertForbidden();
         $this->postJson($customerUrl.'/receipts/preview', $receipt, $headers)->assertForbidden();
+        $this->get('/workspace/reports')->assertOk()->assertSee('My daily sales')->assertDontSee('Branch dashboard');
+        $this->getJson('/workspace/report-data/daily-sales', $headers)->assertOk()->assertJsonCount(0, 'data');
+        $this->getJson('/workspace/report-data/dashboard', $headers)->assertForbidden();
+        $this->getJson('/workspace/report-data/profit', $headers)->assertForbidden();
     }
 
     public function test_pos_holds_reprices_checks_out_and_returns_in_paired_workspace(): void
@@ -133,6 +137,15 @@ final class WorkspaceTest extends TestCase
         $this->postJson('/workspace/pos/checkout', $checkout, $checkoutHeaders)->assertCreated()->assertExactJson($issued->json());
         $this->assertDatabaseCount('issued_documents', 1);
         $this->assertDatabaseCount('payments', 2);
+        $this->get('/workspace/reports')->assertOk()->assertSee('Report filters');
+        $this->getJson('/workspace/report-data/dashboard')->assertForbidden();
+        $this->getJson('/workspace/report-data/dashboard', $headers)->assertOk()
+            ->assertJsonPath('meta.branch_id', $branch->id)->assertJsonPath('data.sales.total', '40.00');
+        $this->getJson('/workspace/report-data/daily-sales', $headers)->assertOk()
+            ->assertJsonPath('data.0.net', '40.00')->assertJsonPath('data.0.collected_by_mode.upi', '20.00');
+        $this->getJson('/workspace/report-data/daily-sales?from=2020-01-01&to=2020-01-01', $headers)->assertOk()->assertJsonCount(0, 'data');
+        $this->getJson('/workspace/report-data/daily-sales?from=2020-01-02&to=2020-01-01', $headers)->assertUnprocessable();
+        $this->getJson('/workspace/report-data/stock-valuation', $headers)->assertOk()->assertJsonPath('meta.basis', 'current');
         $page = '/workspace/pos/invoices/'.$branch->id.'/'.$sale;
         $this->get($page)->assertOk()->assertSee($issued->json('data.invoice_no'))
             ->assertSee('Retain this comment')->assertSee('Print 58 mm receipt');

@@ -1,6 +1,7 @@
 import './pos';
 import './invoice';
 import './parties';
+import './reports';
 
 document.addEventListener('click', (event) => {
     const opener = event.target.closest('[data-open-dialog]');

@@ -47,10 +47,7 @@ Route::prefix('v1')->group(function () {
         Route::get('settings/logo', [ShopSettingsController::class, 'logo']);
         Route::middleware(ResolveBranch::class)->group(function () {
             Route::get('dashboard', [ReportController::class, 'show'])->defaults('report', 'dashboard');
-            Route::get('reports/{report}', [ReportController::class, 'show'])->whereIn('report', [
-                'daily-sales', 'sales-by-product', 'sales-by-cashier', 'stock-valuation', 'low-stock',
-                'customer-outstanding', 'supplier-outstanding', 'payments', 'profit',
-            ]);
+            Route::get('reports/{report}', [ReportController::class, 'show'])->whereIn('report', ReportController::TABLES);
             Route::get('document-series', [DocumentSeriesController::class, 'index']);
             Route::post('document-series', [DocumentSeriesController::class, 'store']);
             Route::post('sales', [SaleController::class, 'store']);
