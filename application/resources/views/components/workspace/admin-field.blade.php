@@ -1,10 +1,11 @@
-@props(['name', 'label', 'value' => '', 'type' => 'text', 'options' => null, 'multiple' => false, 'required' => false])
+@props(['name', 'label', 'value' => '', 'type' => 'text', 'options' => null, 'multiple' => false, 'required' => false, 'placeholder' => null])
 
 @php($fieldId = 'admin-'.\Illuminate\Support\Str::random(8))
 <x-ui.field :id="$fieldId" :$label>
     @if ($options !== null)
         <select id="{{ $fieldId }}" name="{{ $name }}{{ $multiple ? '[]' : '' }}" class="select w-full border-base-300!" @if ($multiple) multiple size="4" @endif @required($required)>
-            @if (!$multiple && !$required)<option value="">Choose an option</option>@endif
+            @if (!$multiple && $placeholder)<option value="" @disabled($required) @selected($value === '' || $value === null)>{{ $placeholder }}</option>
+            @elseif (!$multiple && !$required)<option value="">Choose an option</option>@endif
             @foreach ($options as $key => $option)
                 <option value="{{ $key }}" @selected(in_array((string) $key, array_map('strval', (array) $value), true))>{{ $option }}</option>
             @endforeach

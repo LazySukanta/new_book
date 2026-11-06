@@ -72,6 +72,56 @@ class PurchaseCorrectionTest extends TestCase
         return $this->patchJson('/api/v1/purchases/'.$this->purchase, $data, $this->headers + ['Idempotency-Key' => $key]);
     }
 
+    public function test_workspace_purchase_entry_correction_history_and_paid_removal(): void
+    {
+        $this->withoutVite();
+        $root = '/workspace/purchases';
+        $detail = $root.'/'.$this->purchase;
+        $pair = app(DeviceEnrollment::class)->register($this->owner, 'Purchase workspace', [$this->branch->id]);
+        $this->app['auth']->forgetGuards();
+        $this->post('/sign-in', ['email' => $this->owner->email, 'password' => 'test-password-123',
+            'pairing_code' => $pair['pairing_code']])->assertRedirect('/workspace');
+        $this->withCookie(config('session.cookie'), session()->getId());
+        $this->get("$root/new")->assertOk()->assertSee('Purchase lines');
+        $form = [
+            'branch_id' => $this->branch->id, 'key' => (string) \Illuminate\Support\Str::uuid(),
+            'supplier_id' => $this->supplier, 'supplier_invoice_no' => 'Workspace bill', 'supplier_invoice_date' => '2020-01-01',
+            'cost_includes_tax' => 0, 'tax_type' => 'intra', 'input_tax_recoverable' => 0,
+            'items' => [['product_id' => $this->product->id, 'qty' => '2', 'unit_cost' => '100.00', 'rate_bp' => '']],
+        ];
+        $this->post($root, $form)->assertRedirect();
+        $this->post($root, $form)->assertRedirect();
+        $this->assertDatabaseCount('purchases', 2);
+        app(StockPosting::class)->issueSale($this->owner, $this->branch->id, $this->product->id, 9001, '2');
+
+        $this->get("$detail/correct")->assertOk()->assertSee('Correction fixture');
+        $edit = $this->change(qty: '8') + ['branch_id' => $this->branch->id, 'action' => 'update'];
+        $this->from("$detail/correct")->post("$detail/preview", $edit)->assertRedirect("$detail/correct")
+            ->assertSessionHas('purchase.preview.settlement.resulting_payable', '0.00');
+        $token = session('purchase.token');
+        $this->get("$detail/correct")->assertOk()->assertSee('Review correction');
+        $this->post("$detail/confirm", ['preview_token' => $token])->assertRedirect($detail);
+        $this->post("$detail/confirm", ['preview_token' => $token])->assertRedirect($detail);
+        $this->assertDatabaseHas('purchases', ['id' => $this->purchase, 'current_revision' => 2, 'total' => '800.00']);
+        $this->from("$detail/correct")->post("$detail/preview", $edit)->assertRedirect()->assertSessionHasErrors('purchase');
+        $this->get("$detail/correct")->assertOk()->assertSee('The purchase changed. Generate a new preview.');
+        $this->get("$detail/history")->assertOk()->assertSee('Revision 1')->assertSee('1,000.00')->assertSee('800.00');
+
+        $this->from("$detail/correct")->post("$detail/preview", [
+            'branch_id' => $this->branch->id, 'expected_revision' => 2, 'action' => 'soft_delete', 'reason' => 'Duplicate bill',
+        ])->assertRedirect()->assertSessionHas('purchase.preview.settlement.advance_to_original_supplier', '800.00');
+        $this->post("$detail/confirm", ['preview_token' => session('purchase.token')])->assertRedirect($detail);
+        $this->assertDatabaseCount('payments', 1);
+        $this->get("$root?status=deleted")->assertOk()->assertSee('Correction fixture');
+        $this->get("$detail/history")->assertOk()->assertSee('Revision 3')->assertSee('Duplicate bill');
+
+        $manager = User::factory()->create(['tenant_id' => $this->owner->tenant_id, 'has_all_branches' => true]);
+        $manager->assignRole('Manager');
+        $this->actingAs($manager)->get("$detail/correct")->assertForbidden();
+        $this->post("$detail/preview", $edit)->assertForbidden();
+        $this->get("$root?status=deleted")->assertForbidden();
+    }
+
     public function test_cost_correction_after_issue_keeps_original_cost_and_requires_current_preview(): void
     {
         $issue = app(StockPosting::class)->issueSale($this->owner, $this->branch->id, $this->product->id, 9001, '4');

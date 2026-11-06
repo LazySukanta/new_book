@@ -19,6 +19,9 @@
         @can('products.view')
             <li><a href="{{ route('workspace.inventory', ['section' => 'products']) }}"><x-ui.icon name="box" /> Catalogue</a></li>
         @endcan
+        @can('purchases.manage')
+            <li><a href="{{ route('workspace.purchases.index') }}"><x-ui.icon name="receipt" /> Purchases</a></li>
+        @endcan
         @can('users.manage')
             <li><a href="{{ route('workspace.admin', ['section' => 'staff']) }}"><x-ui.icon name="store" /> Administration</a></li>
         @endcan
