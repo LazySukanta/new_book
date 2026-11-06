@@ -39,6 +39,7 @@ Updated 6 November 2026. Source plan: [MILESTONES](../docs/MILESTONES.md).
 | task033 | M36-R1 | Trading-day and browser regression | Complete | [Remark, tests and screenshots](M36/task033.md) |
 | task034 | M37-R1 | Performance, backup and restore | Complete | [Benchmark and restore evidence](M37/task034.md) |
 | task035 | M38-R1 | Staging deployment rehearsal | Complete | [Deployment verification](M38/task035.md) |
+| task036 | M39-R1 | Shop acceptance and release decision | In progress | [Acceptance checklist](M39/task036.md) |
 
 Use globally increasing task numbers. On completion, write scope, changed files, actual checks, limitations and next step in the milestone folder. Keep test evidence alongside remarks. Never store credentials or tokens. Passing partial checks do not complete a milestone. Commit each completed milestone or release slice after recording its verification.
 
