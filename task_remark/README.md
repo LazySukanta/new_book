@@ -29,6 +29,7 @@ Updated 6 November 2026. Source plan: [MILESTONES](../docs/MILESTONES.md).
 | task023 | M21 | Sale cancellation, credit-note reversal and invoice comments | Complete | [Remark](M21/task023.md), [tests](M21/test-results.md) |
 | task024 | M25-R1 | Basic operational reports and dashboard API | Complete | [Remark](M25/task024.md), [tests](M25/test-results.md) |
 | task025 | M28 | Shared web shell and mockup alignment | Complete | [Remark](M28/task025.md), [tests and screenshots](M28/test-results.md) |
+| task026 | M29 | Browser sign-in and administration | Complete | [Remark](M29/task026.md), [tests](M29/test-results.md) |
 
 Use globally increasing task numbers. On completion, write scope, changed files, actual checks, limitations and next step in the milestone folder. Keep test evidence alongside remarks. Never store credentials or tokens. Passing partial checks do not complete a milestone. Commit each completed milestone or release slice after recording its verification.
 

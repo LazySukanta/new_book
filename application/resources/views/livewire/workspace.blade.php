@@ -15,6 +15,10 @@
         <div class="mt-auto border-t border-base-300 px-2 pt-4">
             <p class="break-words text-sm font-semibold">{{ $actor->name }}</p>
             <p class="mt-1 text-xs text-base-content/75">{{ $actor->getRoleNames()->implode(', ') }}</p>
+            <form method="post" action="{{ route('session.sign-out') }}" class="mt-3">
+                @csrf
+                <button class="btn btn-ghost btn-sm" type="submit">Sign out</button>
+            </form>
         </div>
     </aside>
 
@@ -119,6 +123,10 @@
 
     <x-ui.dialog id="navigation-dialog" title="Workspace navigation">
         <div class="mt-3"><x-workspace.navigation :$section :$canSeeStock /></div>
+        <form method="post" action="{{ route('session.sign-out') }}" class="mt-3">
+            @csrf
+            <button class="btn btn-ghost" type="submit">Sign out</button>
+        </form>
     </x-ui.dialog>
     @if ($branch)
         <x-ui.dialog id="branch-dialog" title="Switch branch">

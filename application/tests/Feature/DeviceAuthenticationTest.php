@@ -49,6 +49,49 @@ class DeviceAuthenticationTest extends TestCase
         $this->assertSame(1, Device::count());
     }
 
+    public function test_browser_forms_enroll_staff_and_restrict_administration(): void
+    {
+        $this->withoutVite();
+        $owner = $this->owner();
+        $branch = Branch::firstOrFail();
+        $pair = $this->pairing($owner);
+        $this->get('/')->assertOk()->assertSee('Pairing code');
+        $this->from('/')->post('/sign-in', ['email' => $owner->email, 'password' => 'bad-password'])
+            ->assertRedirect('/')->assertSessionHasErrors('email');
+        $this->post('/sign-in', $this->credentials($owner, $pair['pairing_code']))->assertRedirect('/workspace');
+        $this->get('/workspace')->assertOk()->assertSee('Administration');
+        foreach (['branches', 'staff', 'settings', 'devices', 'series'] as $section) {
+            $this->get('/workspace/admin/'.$section)->assertOk();
+        }
+        $this->post('/workspace/admin/staff', [
+            'name' => 'Shop cashier', 'email' => 'cashier@example.test', 'password' => 'test-password-123',
+            'role' => 'Cashier', 'branch_ids' => [$branch->id], 'is_active' => 1,
+        ])->assertRedirect('/workspace/admin/staff');
+        $this->post('/workspace/admin/devices', ['name' => 'Cashier browser', 'branch_ids' => [$branch->id]])
+            ->assertRedirect('/workspace/admin/devices');
+        $response = $this->get('/workspace/admin/devices')->assertOk()->assertSee('One-time pairing code');
+        preg_match('/<code[^>]*>([a-zA-Z0-9]{48})<\/code>/', $response->getContent(), $code);
+        $this->assertNotEmpty($code[1] ?? null);
+        $this->get('/workspace/admin/devices')->assertOk()->assertDontSee($code[1]);
+        $series = ['branch_id' => $branch->id, 'financial_year' => '26-27', 'document_type' => 'commercial_bill', 'owning_channel' => 'web', 'prefix_list' => 'A, B'];
+        $this->post('/workspace/admin/series', $series)->assertRedirect('/workspace/admin/series?branch='.$branch->id);
+        $this->from('/workspace/admin/series')->post('/workspace/admin/series', $series + ['next_number' => 200])
+            ->assertRedirect('/workspace/admin/series')->assertSessionHasErrors('next_number');
+        $this->assertDatabaseHas('document_series', ['prefix' => 'A', 'next_number' => 1]);
+        $unpaired = Branch::forceCreate(['tenant_id' => $owner->tenant_id, 'name' => 'Unpaired counter', 'code' => 'B02']);
+        $this->post('/workspace/admin/series', array_replace($series, ['branch_id' => $unpaired->id]))->assertNotFound();
+
+        $this->post('/sign-out')->assertRedirect('/');
+        $this->post('/sign-in', ['email' => 'cashier@example.test', 'password' => 'test-password-123', 'pairing_code' => $code[1]])
+            ->assertRedirect('/workspace');
+        $this->get('/workspace')->assertOk()->assertSee($branch->name)->assertDontSee('Administration');
+        $this->get('/workspace/admin/staff')->assertForbidden();
+        $this->post('/workspace/admin/devices', ['name' => 'Forged', 'branch_ids' => [$branch->id]])->assertForbidden();
+        Device::where('name', 'Cashier browser')->update(['status' => 'revoked']);
+        $this->get('/workspace')->assertForbidden();
+        $this->get('/')->assertOk()->assertSee('Sign in');
+    }
+
     private function owner(): User
     {
         $this->seed(ShopAccessSeeder::class);
