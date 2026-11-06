@@ -1,0 +1,11 @@
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.*
+!.env.example
+/.codex/
+/.idea/
+/.vscode/
+
+# Application dependency, secret, and build exclusions are in application/.gitignore.
