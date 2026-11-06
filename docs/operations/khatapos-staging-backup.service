@@ -1,0 +1,8 @@
+[Unit]
+Description=Back up KhataPOS staging database
+Requires=khatapos-staging-mysql.service
+After=khatapos-staging-mysql.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/khatapos-staging-backup
