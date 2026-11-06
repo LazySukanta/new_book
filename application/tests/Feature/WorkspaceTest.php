@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\DeviceEnrollment;
 use App\Services\ShopCalendar;
 use Database\Seeders\ShopAccessSeeder;
+use Database\Seeders\TradingDemoSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
@@ -18,6 +19,17 @@ use Tests\TestCase;
 final class WorkspaceTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_disposable_trading_fixture_can_be_seeded_again_without_posting_documents(): void
+    {
+        $this->seed(TradingDemoSeeder::class);
+        $this->seed(TradingDemoSeeder::class);
+        $this->assertDatabaseCount('users', 3);
+        $this->assertDatabaseCount('products', 1);
+        $this->assertDatabaseCount('document_series', 2);
+        $this->assertDatabaseCount('stock_ledger', 0);
+        $this->assertDatabaseCount('issued_documents', 0);
+    }
 
     public function test_party_workspace_posts_openings_and_evidence_with_branch_and_role_checks(): void
     {
@@ -115,9 +127,18 @@ final class WorkspaceTest extends TestCase
         $this->assertDatabaseCount('payments', 0);
 
         DB::table('shop_settings')->where('tenant_id', $tenant)->update(['receipt_width_mm' => 58]);
-        DB::table('stock_balances')->updateOrInsert(['tenant_id' => $tenant, 'branch_id' => $branch->id, 'product_id' => $product->id], [
-            'qty' => '5.000', 'inventory_value' => '20.00', 'avg_cost' => '4.00', 'last_known_unit_cost' => '4.00',
-        ]);
+        $supplier = $this->postJson('/workspace/party-data/suppliers', ['name' => 'Trading day supplier'])
+            ->assertCreated()->json('data.id');
+        $purchaseForm = [
+            'branch_id' => $branch->id, 'key' => (string) \Illuminate\Support\Str::uuid(),
+            'supplier_id' => $supplier, 'supplier_invoice_no' => 'R1 trading day',
+            'supplier_invoice_date' => now('Asia/Kolkata')->toDateString(),
+            'cost_includes_tax' => 0, 'tax_type' => 'intra', 'input_tax_recoverable' => 0,
+            'items' => [['product_id' => $product->id, 'qty' => '5', 'unit_cost' => '4.00', 'rate_bp' => 0]],
+        ];
+        $this->post('/workspace/purchases', $purchaseForm)->assertRedirect()->assertSessionHasNoErrors();
+        $purchase = DB::table('purchases')->where('supplier_invoice_no', 'R1 trading day')->value('id');
+        $this->assertNotNull($purchase);
         foreach (['commercial_bill' => 'A', 'credit_note' => 'X'] as $type => $prefix) {
             DB::table('document_series')->insert([
                 'tenant_id' => $tenant, 'branch_id' => $branch->id, 'financial_year' => ShopCalendar::financialYear(now()),
@@ -162,6 +183,31 @@ final class WorkspaceTest extends TestCase
             'reason' => 'Return reversed', 'refund_recovered' => true,
         ], $headers + ['Idempotency-Key' => 'reverse-pos'])->assertOk();
         $this->get($notePage)->assertOk()->assertSee('CANCELLED');
+
+        $customer = $this->postJson('/workspace/party-data/customers', ['name' => 'Trading day customer', 'credit_limit' => '100.00'])
+            ->assertCreated()->json('data.id');
+        $creditCart = ['customer_id' => $customer, 'items' => [['product_id' => $product->id, 'qty' => '2']]];
+        $fingerprint = $this->postJson('/workspace/pos/calculate', $creditCart, $headers)->assertOk()->json('data.pricing_fingerprint');
+        $creditSale = $this->postJson('/workspace/pos/checkout', $creditCart + ['acknowledged_pricing_fingerprint' => $fingerprint],
+            $headers + ['Idempotency-Key' => 'trading-credit-sale'])->assertCreated()->assertJsonPath('data.balance_amount', '60.00');
+        $this->postJson('/workspace/pos/sales/'.$creditSale->json('data.id').'/returns', [
+            'items' => [['sale_item_id' => $creditSale->json('data.items.0.id'), 'qty' => '1']],
+            'reason' => 'Trading day return',
+        ], $headers + ['Idempotency-Key' => 'trading-credit-return'])->assertCreated()->assertJsonPath('data.credit_adjusted', '30.00');
+        $this->postJson('/workspace/party-data/customers/'.$customer.'/receipts', ['amount' => '10.00', 'mode' => 'cash'],
+            $headers + ['Idempotency-Key' => 'trading-collection'])->assertCreated();
+        $detail = '/workspace/purchases/'.$purchase;
+        $this->from($detail.'/correct')->post($detail.'/preview', [
+            'branch_id' => $branch->id, 'action' => 'update', 'expected_revision' => 1, 'reason' => 'Supplier counted one extra',
+            'items' => [['product_id' => $product->id, 'qty' => '6', 'unit_cost' => '4.00', 'rate_bp' => 0]],
+        ])->assertRedirect($detail.'/correct')->assertSessionHasNoErrors();
+        $this->post($detail.'/confirm', ['preview_token' => session('purchase.token')])->assertRedirect($detail)->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('stock_balances', ['product_id' => $product->id, 'qty' => '3.000', 'inventory_value' => '12.00']);
+        $this->getJson('/workspace/party-data/customers/'.$customer.'/ledger', $headers)->assertOk()->assertJsonPath('meta.balance', '20.00');
+        $this->getJson('/workspace/party-data/suppliers/'.$supplier.'/ledger', $headers)->assertOk()->assertJsonPath('meta.balance', '24.00');
+        $this->getJson('/workspace/report-data/daily-sales', $headers)->assertOk()
+            ->assertJsonPath('data.0.net', '70.00')->assertJsonPath('data.0.collected_by_mode.cash', '30.00')
+            ->assertJsonPath('data.0.collected_by_mode.upi', '20.00');
     }
 
     public function test_workspace_requires_a_paired_session_and_remembers_an_authorized_branch(): void

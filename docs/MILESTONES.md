@@ -630,7 +630,7 @@ For each row record Not started / In progress / Passed / Needs decision, test ev
 | M33 | Passed | MySQL regression passed (5 tests, 393 assertions). Chrome verified split payment, payment recovery without duplicate billing, A4 downloads, thermal print retry and credit-note cancellation. Physical printer verification remains a launch gate. [Task 030 and verification](../task_remark/M33/task030.md). |
 | M34 | Passed | Focused MySQL regression passed (7 tests, 243 assertions). Chrome verified billing before opening entry, zero-effect historical evidence, dated balances, and supplier advance and reversal on the branch ledger. [Task 031 and verification](../task_remark/M34/task031.md). |
 | M35 | In progress | R1 passed. Focused MySQL regression passed (5 tests, 399 assertions). Chrome verified dated reports, branch switching, cashier scope and the phone layout. [Task 032 and verification](../task_remark/M35/task032.md). R2 screens remain. |
-| M36 | Not started | |
+| M36 | In progress | R1 passed. Full MySQL regression (55 tests, 1,246 assertions), final workspace regression (5 tests, 153 assertions), migration rehearsal and Chrome trading reconciliation passed. [Task 033](../task_remark/M36/task033.md). R2 regression remains. |
 | M37 | Not started | |
 | M38 | Not started | |
 | M39 | Not started | |
