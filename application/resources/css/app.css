@@ -1,9 +1,53 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
-@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
-@source '../../storage/framework/views/*.php';
+@source "../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php";
+@source "../../vendor/livewire/livewire/src/Features/SupportPagination/views/*.blade.php";
 
-@theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-        'Segoe UI Symbol', 'Noto Color Emoji';
+@plugin "daisyui" {
+    themes: false;
+    logs: false;
+}
+
+@plugin "daisyui/theme" {
+    name: "khata";
+    default: true;
+    color-scheme: light;
+    --color-base-100: #ffffff;
+    --color-base-200: #f6f8fc;
+    --color-base-300: #dbe3f0;
+    --color-base-content: #182742;
+    --color-primary: #245bd3;
+    --color-primary-content: #ffffff;
+    --color-secondary: #eaf1ff;
+    --color-secondary-content: #204fba;
+    --color-neutral: #153c97;
+    --color-neutral-content: #ffffff;
+    --color-info: #245bd3;
+    --color-info-content: #ffffff;
+    --color-error: #a7272d;
+    --color-error-content: #ffffff;
+    --radius-selector: 0.5rem;
+    --radius-field: 0.5rem;
+    --radius-box: 0.75rem;
+    --depth: 0;
+    --noise: 0;
+}
+
+@layer base {
+    :focus-visible {
+        outline: 3px solid #376ae2;
+        outline-offset: 3px;
+    }
+
+    ::selection {
+        background: var(--color-secondary);
+        color: var(--color-base-content);
+    }
+}
+
+@layer components {
+    .skip-link {
+        @apply sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-field focus:bg-base-100 focus:px-4 focus:py-3;
+    }
+
 }

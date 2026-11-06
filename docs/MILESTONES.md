@@ -622,7 +622,7 @@ For each row record Not started / In progress / Passed / Needs decision, test ev
 | M25 | In progress | R1 passed. Focused MySQL checks passed (2 tests, 293 assertions). [Task 024](../task_remark/M25/task024.md), [tests](../task_remark/M25/test-results.md). R2 transfer reporting is pending. |
 | M26 | Not started | |
 | M27 | Not started | |
-| M28 | Not started | |
+| M28 | Passed | Paired workspace, branch switch, responsive overview and stock. MySQL regression passed (14 tests, 93 assertions). Chrome checks passed at 360, 768 and 1440 px. [Task 025](../task_remark/M28/task025.md), [tests and screenshots](../task_remark/M28/test-results.md). |
 | M29 | Not started | |
 | M30 | Not started | |
 | M31 | Not started | |

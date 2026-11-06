@@ -13,6 +13,13 @@ class RequireDevice
 {
     public function handle(Request $request, Closure $next): Response
     {
+        $request->attributes->set('device', $this->resolve($request));
+
+        return $next($request);
+    }
+
+    public function resolve(Request $request): Device
+    {
         $user = $request->user();
         abort_unless($user && $user->is_active && Tenant::whereKey($user->tenant_id)->where('is_active', true)->exists(), 403);
         $token = $user->currentAccessToken();
@@ -25,8 +32,7 @@ class RequireDevice
         }
         $device = Device::where('tenant_id', $user->tenant_id)->where('status', 'active')->find($deviceId);
         abort_unless($device, 403, 'Device authorization failed.');
-        $request->attributes->set('device', $device);
 
-        return $next($request);
+        return $device;
     }
 }
