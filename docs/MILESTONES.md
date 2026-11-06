@@ -632,5 +632,5 @@ For each row record Not started / In progress / Passed / Needs decision, test ev
 | M35 | In progress | R1 passed. Focused MySQL regression passed (5 tests, 399 assertions). Chrome verified dated reports, branch switching, cashier scope and the phone layout. [Task 032 and verification](../task_remark/M35/task032.md). R2 screens remain. |
 | M36 | In progress | R1 passed. Full MySQL regression (55 tests, 1,246 assertions), final workspace regression (5 tests, 153 assertions), migration rehearsal and Chrome trading reconciliation passed. [Task 033](../task_remark/M36/task033.md). R2 regression remains. |
 | M37 | In progress | R1 passed. Staging backup timer, 14-day retention and isolated restore verified. VPS search p95 56.83 ms and ten-line sale posting p95 86.53 ms. [Task 034](../task_remark/M37/task034.md). R2 verification remains. |
-| M38 | Not started | |
+| M38 | In progress | R1 passed. HTTPS staging trade, invoice rendering, isolated MySQL restart persistence, private-file protection and post-trade backup verified. [Task 035](../task_remark/M38/task035.md). R2 upgrade rehearsal remains. |
 | M39 | Not started | |

@@ -56,6 +56,16 @@ API demonstration: POST `/api/v1/auth/token` with email, password and a fresh ap
 
 All current device enrollment is for the web channel, derived server-side. Native apps, their channel provisioning and offline synchronization remain out of scope. Security events record metadata without credentials, pairing codes or token contents. Posting operations use audited transactions and idempotency.
 
+## Staging on Hestia
+
+The staging UI is at [pos.kagajghar.com](https://pos.kagajghar.com). Run build and Artisan commands from `application/`. Deploy a Git release with `npm ci` and `npm run build` assets, then run `composer install --no-dev --prefer-dist --optimize-autoloader`, `php artisan migrate --force`, `php artisan config:cache`, and `php artisan view:cache` as the site account. Run the access seeder when creating a fresh database and use `php artisan shop:setup` for first-owner enrollment.
+
+The Hestia web root serves only Laravel's public assets and a front controller that loads the release from the domain's private directory. Keep the environment file and dependencies in the private release. The current PHP-FPM pool is PHP 8.3 with its own domain socket. HTTPS is forced and the app uses secure session cookies, database sessions, disabled debug output, and daily logs. The app user owns writable storage and bootstrap cache.
+
+The staging instance uses a dedicated MySQL 8.4 service on localhost port 33319. Keep its application credentials in the private environment file and its root-only administration credentials outside the domain directory. The existing shared MariaDB instance serves other applications. The [backup timer and restore notes](task_remark/M37/task034.md) describe scheduling, retention, and reconciliation.
+
+For an application rollback, keep the previous private release and its hashed assets, then switch the public front controller back to that release and verify the sign-in page and health route. Check database compatibility first. For a schema rollback or recovery, restore the matching backup to a separate schema, reconcile it, and point the recovered release at the verified schema during an authorized maintenance window.
+
 ## This Windows workstation
 
 PHP is installed under `C:\Users\local User\AppData\Local\Microsoft\WinGet\Packages\PHP.PHP.8.5_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe`. Composer is `C:\Users\local User\AppData\Local\KhataPOS\tools\composer.phar`; invoke it with PHP if Composer is absent from PATH.
