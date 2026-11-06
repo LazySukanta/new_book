@@ -1,10 +1,17 @@
 <?php
 
 use App\Http\Controllers\AuthenticationController;
+use App\Http\Controllers\CatalogueController;
+use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\SaleController;
+use App\Http\Controllers\SaleCorrectionController;
+use App\Http\Controllers\SaleReturnController;
+use App\Http\Controllers\WorkspacePosController;
 use App\Http\Controllers\WorkspaceAdministrationController;
 use App\Http\Controllers\WorkspaceInventoryController;
 use App\Http\Controllers\WorkspacePurchaseController;
 use App\Http\Middleware\RequireDevice;
+use App\Http\Middleware\ResolveBranch;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [AuthenticationController::class, 'signInPage'])->name('login');
@@ -18,6 +25,29 @@ Route::post('/sign-out', [AuthenticationController::class, 'logout'])
     ->middleware('auth:web')->name('session.sign-out');
 Route::middleware(['auth:web', RequireDevice::class])->group(function () {
     Route::view('/workspace', 'workspace', ['section' => 'overview'])->name('workspace');
+    Route::prefix('workspace/pos')->middleware('can:sales.create')->group(function () {
+        Route::view('/', 'workspace', ['section' => 'pos'])->name('workspace.pos');
+        Route::middleware(ResolveBranch::class)->group(function () {
+            Route::get('/products', [CatalogueController::class, 'index']);
+            Route::get('/lookup', [CatalogueController::class, 'lookup']);
+            Route::get('/customers', [CustomerController::class, 'index']);
+            Route::get('/customers/{customer}', [CustomerController::class, 'show'])->whereNumber('customer');
+            Route::post('/customers', [CustomerController::class, 'save']);
+            Route::post('/calculate', [WorkspacePosController::class, 'calculate']);
+            Route::post('/checkout', [WorkspacePosController::class, 'checkout']);
+            Route::get('/held', [SaleController::class, 'held']);
+            Route::post('/held', [WorkspacePosController::class, 'hold']);
+            Route::delete('/held/{sale}', [SaleController::class, 'discard'])->whereNumber('sale');
+            Route::post('/sales/{sale}/returns', [SaleReturnController::class, 'store'])->whereNumber('sale');
+            Route::post('/sales/{sale}/cancel', [SaleCorrectionController::class, 'cancel'])->whereNumber('sale');
+            Route::patch('/sales/{sale}/comment', [SaleCorrectionController::class, 'comment'])->whereNumber('sale');
+            Route::post('/credit-notes/{return}/cancel', [SaleCorrectionController::class, 'reverseReturn'])->whereNumber('return');
+        });
+    });
+    Route::get('/workspace/pos/invoices/{branch}/{sale?}', [WorkspacePosController::class, 'invoices'])
+        ->whereNumber(['branch', 'sale'])->name('workspace.pos.invoices');
+    Route::get('/workspace/pos/invoices/{branch}/credit-note/{return}', [WorkspacePosController::class, 'creditNote'])
+        ->whereNumber(['branch', 'return'])->name('workspace.pos.credit-note');
     Route::view('/workspace/stock', 'workspace', ['section' => 'stock'])->name('workspace.stock');
     Route::get('/workspace/admin/{section}', [WorkspaceAdministrationController::class, 'show'])
         ->whereIn('section', ['branches', 'staff', 'devices', 'settings', 'series'])->name('workspace.admin');

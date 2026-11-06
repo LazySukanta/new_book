@@ -8,6 +8,10 @@
                 <x-ui.icon name="overview" /> Overview
             </a>
         </li>
+        @can('sales.create')
+            <li><a href="{{ route('workspace.pos') }}" @class(['menu-active bg-secondary! text-secondary-content!' => $section === 'pos'])
+                @if ($section === 'pos') aria-current="page" @endif><x-ui.icon name="receipt" /> Point of sale</a></li>
+        @endcan
         @if ($canSeeStock)
             <li>
                 <a href="{{ route('workspace.stock') }}" @class(['menu-active bg-secondary! text-secondary-content!' => $section === 'stock'])

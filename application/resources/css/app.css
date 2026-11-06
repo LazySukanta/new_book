@@ -1,5 +1,20 @@
 @import "tailwindcss";
 
+@media print {
+    @page { margin: 2mm; }
+    body:has(.invoice-paper) { background: white; color: black; }
+    body:has(.invoice-paper) .skip-link,
+    .invoice-controls,
+    .invoice-note-excluded { display: none !important; }
+    #main-content:has(.invoice-paper) { padding: 0; margin: 0; }
+    .invoice-paper { border: 0; border-radius: 0; padding: 0; margin: 0; font-size: 9pt; }
+    .invoice-paper-58 { width: 54mm; }
+    .invoice-paper-80 { width: 76mm; }
+    .invoice-paper h1 { font-size: 12pt; }
+    .invoice-paper .text-sm, .invoice-paper .text-xs { font-size: 8pt; }
+    .invoice-lines tr { break-inside: avoid; }
+}
+
 @source "../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php";
 @source "../../vendor/livewire/livewire/src/Features/SupportPagination/views/*.blade.php";
 

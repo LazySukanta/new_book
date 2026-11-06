@@ -3,11 +3,14 @@
 namespace Tests\Feature;
 
 use App\Models\Branch;
+use App\Models\Product;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\DeviceEnrollment;
+use App\Services\ShopCalendar;
 use Database\Seeders\ShopAccessSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 use Livewire\Drawer\Utils;
 use Tests\TestCase;
@@ -15,6 +18,90 @@ use Tests\TestCase;
 final class WorkspaceTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_pos_holds_reprices_checks_out_and_returns_in_paired_workspace(): void
+    {
+        $this->withoutVite();
+        $this->seed(ShopAccessSeeder::class);
+        $branch = Branch::firstOrFail();
+        $branch->forceFill(['state_code' => '36'])->save();
+        $tenant = $branch->tenant_id;
+        $owner = User::factory()->create(['tenant_id' => $tenant, 'has_all_branches' => true]);
+        $owner->assignRole('Owner');
+        $device = app(DeviceEnrollment::class)->register($owner, 'POS browser', [$branch->id])['device'];
+        $this->actingAs($owner)->withSession(['device_id' => $device->id, 'tenant_id' => $tenant]);
+        DB::table('shop_settings')->insert(['tenant_id' => $tenant, 'name' => 'POS shop', 'gst_registration_type' => 'unregistered']);
+        $unit = DB::table('units')->insertGetId(['tenant_id' => $tenant, 'code' => 'PCS', 'name' => 'Piece']);
+        $rate = DB::table('tax_rates')->insertGetId(['tenant_id' => $tenant, 'name' => 'Zero', 'rate_bp' => 0]);
+        $product = Product::forceCreate(['tenant_id' => $tenant, 'sku' => 'PEN', 'barcode' => '101', 'name' => 'Pen',
+            'unit_id' => $unit, 'tax_rate_id' => $rate, 'retail_price' => '10.00', 'wholesale_price' => '8.00', 'purchase_price' => '4.00',
+            'tax_inclusive' => false]);
+        $headers = ['X-Branch-Id' => (string) $branch->id];
+        $cart = ['items' => [['product_id' => $product->id, 'qty' => '2']], 'note' => 'Retain this comment'];
+        $this->get('/workspace/pos')->assertOk()->assertSee('Point of sale');
+        $this->getJson('/workspace/pos/lookup?code=101', $headers)->assertOk()->assertJsonPath('data.id', $product->id);
+        $this->postJson('/workspace/pos/calculate', $cart)->assertForbidden();
+        $before = $this->postJson('/workspace/pos/calculate', $cart, $headers)->assertOk()
+            ->assertJsonPath('data.totals.total', '20.00')->json('data.pricing_fingerprint');
+        $hold = $this->postJson('/workspace/pos/held', $cart + ['status' => 'completed', 'acknowledged_pricing_fingerprint' => $before],
+            $headers + ['Idempotency-Key' => 'initial-pos-hold'])->assertCreated()->assertJsonPath('data.status', 'held')->json('data.id');
+        $product->forceFill(['retail_price' => '20.00'])->save();
+        $this->getJson('/workspace/pos/held', $headers)->assertOk()->assertJsonPath('data.0.id', $hold)
+            ->assertJsonPath('data.0.pricing.pricing_fingerprint', $before);
+        $this->postJson('/workspace/pos/held', $cart + ['held_sale_id' => $hold, 'acknowledged_pricing_fingerprint' => $before],
+            $headers + ['Idempotency-Key' => 'stale-pos-hold'])->assertConflict()->assertJsonPath('code', 'PRICE_CHANGED');
+        $after = $this->postJson('/workspace/pos/calculate', $cart, $headers)->assertOk()
+            ->assertJsonPath('data.totals.total', '40.00')->json('data.pricing_fingerprint');
+        $this->postJson('/workspace/pos/held', $cart + ['held_sale_id' => $hold, 'acknowledged_pricing_fingerprint' => $after],
+            $headers + ['Idempotency-Key' => 'updated-pos-hold'])->assertOk()->assertJsonPath('data.id', $hold)
+            ->assertJsonPath('data.cart.note', 'Retain this comment');
+        $this->deleteJson('/workspace/pos/held/'.$hold, ['reason' => 'Customer changed their mind'], $headers + ['Idempotency-Key' => 'discard-pos-hold'])
+            ->assertOk()->assertJsonPath('data.status', 'discarded');
+        $this->assertDatabaseCount('sales', 1);
+        $this->assertDatabaseCount('issued_documents', 0);
+        $this->assertDatabaseCount('stock_ledger', 0);
+        $this->assertDatabaseCount('payments', 0);
+
+        DB::table('shop_settings')->where('tenant_id', $tenant)->update(['receipt_width_mm' => 58]);
+        DB::table('stock_balances')->updateOrInsert(['tenant_id' => $tenant, 'branch_id' => $branch->id, 'product_id' => $product->id], [
+            'qty' => '5.000', 'inventory_value' => '20.00', 'avg_cost' => '4.00', 'last_known_unit_cost' => '4.00',
+        ]);
+        foreach (['commercial_bill' => 'A', 'credit_note' => 'X'] as $type => $prefix) {
+            DB::table('document_series')->insert([
+                'tenant_id' => $tenant, 'branch_id' => $branch->id, 'financial_year' => ShopCalendar::financialYear(now()),
+                'document_type' => $type, 'owning_channel' => 'web', 'prefix' => $prefix, 'rollover_order' => 1,
+                'created_by' => $owner->id,
+            ]);
+        }
+        $checkout = $cart + ['acknowledged_pricing_fingerprint' => $after, 'payments' => [
+            ['mode' => 'cash', 'amount' => '20.00'], ['mode' => 'upi', 'amount' => '20.00'],
+        ]];
+        $this->postJson('/workspace/pos/checkout', array_replace($checkout, ['payments' => []]),
+            $headers + ['Idempotency-Key' => 'underpaid-pos'])->assertUnprocessable();
+        $checkoutHeaders = $headers + ['Idempotency-Key' => 'split-payment-pos'];
+        $issued = $this->postJson('/workspace/pos/checkout', $checkout + ['status' => 'held'], $checkoutHeaders)->assertCreated()
+            ->assertJsonPath('data.paid_amount', '40.00')->assertJsonPath('data.status', 'completed');
+        $sale = $issued->json('data.id');
+        $this->postJson('/workspace/pos/checkout', $checkout, $checkoutHeaders)->assertCreated()->assertExactJson($issued->json());
+        $this->assertDatabaseCount('issued_documents', 1);
+        $this->assertDatabaseCount('payments', 2);
+        $page = '/workspace/pos/invoices/'.$branch->id.'/'.$sale;
+        $this->get($page)->assertOk()->assertSee($issued->json('data.invoice_no'))
+            ->assertSee('Retain this comment')->assertSee('Print 58 mm receipt');
+        $this->get('/workspace/pos/invoices/'.$branch->id)->assertOk()->assertSee($issued->json('data.invoice_no'));
+        $product->forceFill(['retail_price' => '30.00'])->save();
+        $returned = $this->postJson('/workspace/pos/sales/'.$sale.'/returns', [
+            'items' => [['sale_item_id' => $issued->json('data.items.0.id'), 'qty' => '1']],
+            'reason' => 'One unit returned', 'refund_mode' => 'cash',
+        ], $headers + ['Idempotency-Key' => 'return-pos'])->assertCreated()->assertJsonPath('data.totals.total', '20.00');
+        $note = $returned->json('data.id');
+        $notePage = '/workspace/pos/invoices/'.$branch->id.'/credit-note/'.$note;
+        $this->get($notePage)->assertOk()->assertSee('CREDIT NOTE')->assertSee($issued->json('data.invoice_no'));
+        $this->postJson('/workspace/pos/credit-notes/'.$note.'/cancel', [
+            'reason' => 'Return reversed', 'refund_recovered' => true,
+        ], $headers + ['Idempotency-Key' => 'reverse-pos'])->assertOk();
+        $this->get($notePage)->assertOk()->assertSee('CANCELLED');
+    }
 
     public function test_workspace_requires_a_paired_session_and_remembers_an_authorized_branch(): void
     {

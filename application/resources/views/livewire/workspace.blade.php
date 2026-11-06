@@ -30,7 +30,7 @@
                 </button>
                 <span class="font-bold lg:hidden">KhataPOS</span>
                 <p class="hidden text-sm text-base-content/75 lg:block">Workspace <span aria-hidden="true" class="mx-1">/</span>
-                    <strong class="text-base-content">{{ $section === 'stock' ? 'Stock' : 'Overview' }}</strong>
+                    <strong class="text-base-content">{{ match ($section) { 'pos' => 'Point of sale', 'stock' => 'Stock', default => 'Overview' } }}</strong>
                 </p>
             </div>
             @if ($branch)
@@ -42,9 +42,9 @@
         </header>
 
         <main id="main-content" tabindex="-1" class="mx-auto max-w-[1600px] px-4 py-6 sm:px-8 sm:py-8">
-            <h1 class="text-2xl font-bold tracking-tight sm:text-[28px]">{{ $section === 'stock' ? 'Stock' : 'Overview' }}</h1>
+            <h1 class="text-2xl font-bold tracking-tight sm:text-[28px]">{{ match ($section) { 'pos' => 'Point of sale', 'stock' => 'Stock', default => 'Overview' } }}</h1>
             <p class="mt-1 mb-6 text-sm text-base-content/75">
-                {{ $section === 'stock' ? 'Current quantities for the active branch.' : 'See what is happening at your branch.' }}
+                {{ match ($section) { 'pos' => 'Scan a barcode or search for products to start a bill.', 'stock' => 'Current quantities for the active branch.', default => 'See what is happening at your branch.' } }}
             </p>
             @if ($section === 'stock' && $branch)
                 <nav aria-label="Stock tools" class="mb-4 flex flex-wrap gap-2">
@@ -55,6 +55,8 @@
             @endif
             @if (! $branch)
                 <x-ui.feedback>No branch is available on this device. Ask an owner to check the branch and device access.</x-ui.feedback>
+            @elseif ($section === 'pos')
+                @include('workspace-pos')
             @else
                 @if ($section === 'overview')
                     <section class="flex flex-wrap items-center justify-between gap-4 rounded-box bg-neutral p-5 text-neutral-content sm:p-7" aria-labelledby="branch-heading">

@@ -125,13 +125,13 @@ final class SaleController
         ];
     }
 
-    public function store(Request $request, PostingTransaction $transaction): JsonResponse
+    public function store(Request $request, PostingTransaction $transaction, bool $verifyHeldPricing = false): JsonResponse
     {
         abort_unless($request->user()->can('sales.create'), 403);
         $data = $request->validate([
             'status' => 'sometimes|in:held,completed',
             'held_sale_id' => 'sometimes|nullable|integer|min:1',
-            'acknowledged_pricing_fingerprint' => ['required_unless:status,held', 'regex:/\A[a-f0-9]{64}\z/'],
+            'acknowledged_pricing_fingerprint' => [$verifyHeldPricing ? 'required' : 'required_unless:status,held', 'regex:/\A[a-f0-9]{64}\z/'],
             'customer_id' => 'sometimes|nullable|integer|min:1',
             'sale_type' => 'sometimes|required|in:retail,wholesale',
             'place_of_supply_override' => 'sometimes|nullable|string',
@@ -148,10 +148,10 @@ final class SaleController
         ]);
         $data['items'] = $request->input('items');
 
-        return $transaction->run($request, 'sale.post', $data, fn () => $this->post($request, $data));
+        return $transaction->run($request, 'sale.post', $data, fn () => $this->post($request, $data, $verifyHeldPricing));
     }
 
-    private function post(Request $request, array $data): JsonResponse
+    private function post(Request $request, array $data, bool $verifyHeldPricing): JsonResponse
     {
         $actor = $request->user();
         $device = $request->attributes->get('device');
@@ -177,7 +177,7 @@ final class SaleController
         DB::table('tax_rates')->whereIn('id', $products->pluck('tax_rate_id'))->orderBy('id')->lockForUpdate()->get();
         $settings = DB::table('shop_settings')->where('tenant_id', $actor->tenant_id)->lockForUpdate()->first();
         $preview = app(SalePricing::class)->calculate($actor, $branch, $data);
-        if (! $holding && ! hash_equals($preview['pricing_fingerprint'], $data['acknowledged_pricing_fingerprint'])) {
+        if ((! $holding || $verifyHeldPricing) && ! hash_equals($preview['pricing_fingerprint'], $data['acknowledged_pricing_fingerprint'])) {
             return response()->json(['code' => 'PRICE_CHANGED', 'message' => 'Review the updated pricing.', 'data' => $preview], 409);
         }
         $total = BigDecimal::of($preview['totals']['total']);

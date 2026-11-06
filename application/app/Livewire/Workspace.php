@@ -59,12 +59,13 @@ final class Workspace extends Component
 
         $canSeeStock = $actor->can('stock.view');
         abort_if($this->section === 'stock' && ! $canSeeStock, 403);
+        abort_if($this->section === 'pos' && ! $actor->can('sales.create'), 403);
 
         $today = CarbonImmutable::now('Asia/Kolkata')->startOfDay();
         $reports = app(OperationalReports::class);
         $metrics = [];
         $stock = null;
-        if ($branch && $canSeeStock) {
+        if ($branch && $canSeeStock && $this->section !== 'pos') {
             $query = $reports->stock($branch)->orderBy('products.name')->orderBy('products.id');
             if (! $actor->can('reports.view')) {
                 $query->select('products.id as product_id', 'products.name', 'products.sku', 'products.reorder_level')

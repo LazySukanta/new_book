@@ -29,7 +29,7 @@ Repository preparation and foundation implementation are complete: Laravel 13, l
 3. Implement only that slice. Keep Livewire and API on the same business operations. Add a dependency only for a concrete requirement. Avoid a separate frontend server, internal HTTP calls, queues and Redis as deployment prerequisites. A full SaaS tenant framework, event bus, offline replica or second accounting system is outside the plan.
 4. When rules disagree, apply RULES > SCHEMA > SPEC and document the discrepancy. If the sources do not determine a financial, tax, authorization or historical-data outcome, record **Needs decision** with a worked example and ask the owner. Never substitute a mock value or a passing fixture for the missing rule.
 5. Exercise the normal entry point on the dedicated test environment. Record the command, actual output/result, demonstration and any pending check in the progress ledger. For a posting operation include before/after quantity, value, balance and document count as applicable. If runtime, hardware or owner review is missing, record precisely which acceptance check is still open.
-6. Stop at the milestone boundary. Handoff must name the changed files, verified behavior, open decisions and next eligible milestone. Preserve the original requirement docs and mockups unless an agreed change specifically requires editing them.
+6. Commit the verified milestone changes and its evidence before starting the next milestone. Stop at the milestone boundary. Handoff must name the changed files, verified behavior, open decisions and next eligible milestone. Preserve the original requirement docs and mockups unless an agreed change specifically requires editing them.
 
 **Performance checks during implementation.** Paginate lists at the database, filter by tenant and branch before aggregation, fetch only displayed columns and related rows, and inspect query counts on representative pages. Keep print rendering, external calls and slow exports outside posting transactions. Keep validations that depend on current balances or prices inside the lock. Measure the specified 20,000-product search and ten-line sale targets against the same data before and after tuning. Add indexes for measured query patterns. Correctness and repeatable latency measurements are the acceptance evidence.
 
@@ -626,8 +626,8 @@ For each row record Not started / In progress / Passed / Needs decision, test ev
 | M29 | Passed | Browser sign-in and scoped administration. Focused MySQL regression passed (18 tests, 177 assertions); Chrome sign-in verified on desktop and phone. [Task 026](../task_remark/M29/task026.md), [tests](../task_remark/M29/test-results.md). |
 | M30 | Passed | Catalogue, CSV and stock movement screens verified. MySQL regression passed (6 tests, 173 assertions); Chrome verified keyboard search and phone layout. [Task 027](../task_remark/M30/task027.md), [tests and screenshots](../task_remark/M30/test-results.md). |
 | M31 | In progress | R1 passed. Purchase entry, owner correction and retained history verified. MySQL passed 15 tests with 249 assertions. [Task 028](../task_remark/M31/task028.md), [tests and screenshots](../task_remark/M31/test-results.md). R2 supplier-return screens await M22. |
-| M32 | Not started | |
-| M33 | Not started | |
+| M32 | Passed | MySQL regression passed (5 tests, 371 assertions). Chrome verified keyboard operation, cart restoration, phone layout and re-holding the same bill after acknowledging updated prices. [Task 029 and verification](../task_remark/M32/task029.md). |
+| M33 | Passed | MySQL regression passed (5 tests, 393 assertions). Chrome verified split payment, payment recovery without duplicate billing, A4 downloads, thermal print retry and credit-note cancellation. Physical printer verification remains a launch gate. [Task 030 and verification](../task_remark/M33/task030.md). |
 | M34 | Not started | |
 | M35 | Not started | |
 | M36 | Not started | |
