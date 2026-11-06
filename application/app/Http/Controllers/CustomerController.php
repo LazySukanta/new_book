@@ -248,6 +248,8 @@ final class CustomerController
 
             return ApiResponse::data($page->items(), meta: [
                 'account_id' => $account?->id, 'opening_status' => $status, 'balance_incomplete' => $status === 'not_entered',
+                'opening_status_effective_at' => $status !== 'not_entered' ? $account?->opening_status_effective_at : null,
+                'opening_confirmed_at' => $status !== 'not_entered' ? $account?->opening_confirmed_at : null,
                 'balance' => $balance, 'current_page' => $page->currentPage(), 'last_page' => $page->lastPage(), 'total' => $page->total(),
             ]);
         });

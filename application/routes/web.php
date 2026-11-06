@@ -9,6 +9,7 @@ use App\Http\Controllers\SaleReturnController;
 use App\Http\Controllers\WorkspacePosController;
 use App\Http\Controllers\WorkspaceAdministrationController;
 use App\Http\Controllers\WorkspaceInventoryController;
+use App\Http\Controllers\WorkspacePartyController;
 use App\Http\Controllers\WorkspacePurchaseController;
 use App\Http\Middleware\RequireDevice;
 use App\Http\Middleware\ResolveBranch;
@@ -49,6 +50,14 @@ Route::middleware(['auth:web', RequireDevice::class])->group(function () {
     Route::get('/workspace/pos/invoices/{branch}/credit-note/{return}', [WorkspacePosController::class, 'creditNote'])
         ->whereNumber(['branch', 'return'])->name('workspace.pos.credit-note');
     Route::view('/workspace/stock', 'workspace', ['section' => 'stock'])->name('workspace.stock');
+    Route::view('/workspace/customers', 'workspace', ['section' => 'customers'])->name('workspace.customers');
+    Route::view('/workspace/suppliers', 'workspace', ['section' => 'suppliers'])->name('workspace.suppliers');
+    Route::prefix('workspace/party-data')->group(function () {
+        require __DIR__.'/parties.php';
+        Route::get('/{kind}/{party}/entries/{source}/{entry}', [WorkspacePartyController::class, 'entry'])
+            ->whereIn('kind', ['customers', 'suppliers'])->whereIn('source', ['opening', 'receipt', 'payment'])
+            ->whereNumber(['party', 'entry'])->middleware(ResolveBranch::class);
+    });
     Route::get('/workspace/admin/{section}', [WorkspaceAdministrationController::class, 'show'])
         ->whereIn('section', ['branches', 'staff', 'devices', 'settings', 'series'])->name('workspace.admin');
     Route::post('/workspace/admin/{section}/{record?}', [WorkspaceAdministrationController::class, 'save'])

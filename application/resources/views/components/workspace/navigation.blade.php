@@ -26,6 +26,14 @@
         @can('purchases.manage')
             <li><a href="{{ route('workspace.purchases.index') }}"><x-ui.icon name="receipt" /> Purchases</a></li>
         @endcan
+        @can('customers.view')
+            <li><a href="{{ route('workspace.customers') }}" @class(['menu-active bg-secondary! text-secondary-content!' => $section === 'customers'])
+                @if ($section === 'customers') aria-current="page" @endif><x-ui.icon name="receipt" /> Customers</a></li>
+        @endcan
+        @can('suppliers.manage')
+            <li><a href="{{ route('workspace.suppliers') }}" @class(['menu-active bg-secondary! text-secondary-content!' => $section === 'suppliers'])
+                @if ($section === 'suppliers') aria-current="page" @endif><x-ui.icon name="receipt" /> Suppliers</a></li>
+        @endcan
         @can('users.manage')
             <li><a href="{{ route('workspace.admin', ['section' => 'staff']) }}"><x-ui.icon name="store" /> Administration</a></li>
         @endcan

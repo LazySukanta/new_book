@@ -155,6 +155,8 @@ final class SupplierAccountPosting
         return [
             'paid_at' => $effective, 'balance_effect' => $evidence === null ? 'normal' : 'included_in_opening',
             'balance_delta' => $evidence === null ? (string) $amount->negated() : '0.00',
+            'duplicate_reference' => $account !== null && isset($data['reference'])
+                && DB::table('payments')->where($this->scope($account) + ['reference' => $data['reference'], 'status' => 'posted'])->exists(),
         ];
     }
 

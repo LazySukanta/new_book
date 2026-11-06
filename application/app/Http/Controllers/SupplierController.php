@@ -114,9 +114,16 @@ final class SupplierController
             $page = $entries->select('events.*')->selectRaw('SUM(signed_amount) OVER (ORDER BY effective_at, created_at, source, id) AS running_balance')
                 ->orderByDesc('effective_at')->orderByDesc('created_at')->orderByDesc('source')->orderByDesc('id')
                 ->paginate($filters['per_page'] ?? 25);
+            $status = $account->opening_status ?? 'not_entered';
+            if ($account && ((isset($filters['as_of']) && $account->opening_status_effective_at > $posting->date($filters['as_of'])->toDateTimeString())
+                || (isset($filters['recorded_as_of']) && $account->opening_confirmed_at > $posting->date($filters['recorded_as_of'])->toDateTimeString()))) {
+                $status = 'not_entered';
+            }
 
             return ApiResponse::data($page->items(), meta: [
-                'account_id' => $account?->id, 'opening_status' => $account?->opening_status ?? 'not_entered',
+                'account_id' => $account?->id, 'opening_status' => $status,
+                'opening_status_effective_at' => $status !== 'not_entered' ? $account?->opening_status_effective_at : null,
+                'opening_confirmed_at' => $status !== 'not_entered' ? $account?->opening_confirmed_at : null,
                 'balance' => $balance, 'current_page' => $page->currentPage(), 'last_page' => $page->lastPage(),
                 'per_page' => $page->perPage(), 'total' => $page->total(),
             ]);
@@ -148,7 +155,8 @@ final class SupplierController
                 'historical_entry' => 'sometimes|boolean', 'reason' => 'required_if:historical_entry,true|nullable|string|max:255',
                 'included_in_opening_entry_id' => 'sometimes|integer|min:1', 'auto_allocate' => 'sometimes|boolean',
             ],
-            'apply' => $date + $amount + [
+            'apply' => $amount + [
+                'effective_at' => 'sometimes|required|date',
                 'opening_entry_id' => 'required_without:purchase_id|prohibits:purchase_id|integer|min:1',
                 'purchase_id' => 'required_without:opening_entry_id|prohibits:opening_entry_id|integer|min:1',
             ],
@@ -176,7 +184,7 @@ final class SupplierController
                 'zero' => $posting->status($request, $account, 'confirmed_zero', $posting->date($data['effective_at']), $data['reason']),
                 'reverse-opening' => $posting->reverseOpening($request, $account, $id, $data),
                 'payment' => $posting->payment($request, $account, $data),
-                'apply' => ['allocation_id' => $posting->apply($request, $account, $id, $data)],
+                'apply' => ['allocation_id' => $posting->apply($request, $account, $id, $data + ['effective_at' => now()->toIso8601String()])],
                 'reverse-payment' => $posting->reversePayment($request, $account, $id, $data['reason']),
                 'unapply' => ['allocation_id' => $posting->unapply($request, $account, $id, $allocation, $data['reason'])],
             };

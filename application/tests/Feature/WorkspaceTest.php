@@ -19,6 +19,54 @@ final class WorkspaceTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_party_workspace_posts_openings_and_evidence_with_branch_and_role_checks(): void
+    {
+        $this->withoutVite();
+        $this->seed(ShopAccessSeeder::class);
+        $branch = Branch::firstOrFail();
+        $tenant = $branch->tenant_id;
+        $owner = User::factory()->create(['tenant_id' => $tenant, 'has_all_branches' => true]);
+        $owner->assignRole('Owner');
+        $cashier = User::factory()->create(['tenant_id' => $tenant, 'has_all_branches' => true]);
+        $cashier->assignRole('Cashier');
+        $device = app(DeviceEnrollment::class)->register($owner, 'Ledger browser', [$branch->id])['device'];
+        $this->actingAs($owner)->withSession(['device_id' => $device->id, 'tenant_id' => $tenant]);
+        $headers = ['X-Branch-Id' => (string) $branch->id];
+        $base = '/workspace/party-data';
+        $this->get('/workspace/customers')->assertOk()->assertSee('Customer directory');
+        $this->get('/workspace/suppliers')->assertOk()->assertSee('Supplier directory');
+        $customer = $this->postJson($base.'/customers', ['name' => 'Ledger buyer'])->assertCreated()->json('data.id');
+        $supplier = $this->postJson($base.'/suppliers', ['name' => 'Ledger supplier'])->assertCreated()->json('data.id');
+        $customerUrl = $base.'/customers/'.$customer;
+        $supplierUrl = $base.'/suppliers/'.$supplier;
+        $this->getJson($customerUrl.'/ledger')->assertForbidden();
+        $this->getJson($customerUrl.'/ledger', $headers)->assertOk()->assertJsonPath('meta.opening_status', 'not_entered');
+        $date = now()->subDays(5)->toIso8601String();
+        $opening = ['entry_type' => 'due', 'amount' => '100.00', 'effective_at' => $date, 'reason' => 'Prior statement'];
+        $id = $this->postJson($customerUrl.'/opening-entries', $opening, $headers + ['Idempotency-Key' => 'workspace-opening'])
+            ->assertCreated()->json('data.id');
+        $receipt = ['amount' => '25.00', 'mode' => 'cash', 'historical_entry' => true, 'reason' => 'Recorded evidence',
+            'paid_at' => now()->subDays(6)->toIso8601String(), 'included_in_opening_entry_id' => $id];
+        $this->postJson($customerUrl.'/receipts/preview', $receipt, $headers)->assertOk()->assertJsonPath('data.balance_delta', '0.00');
+        $receiptId = $this->postJson($customerUrl.'/receipts', $receipt, $headers + ['Idempotency-Key' => 'workspace-evidence'])
+            ->assertCreated()->json('data.id');
+        $this->getJson($customerUrl.'/entries/receipt/'.$receiptId, $headers)->assertOk()
+            ->assertJsonPath('data.record.included_in_opening_entry_id', $id)->assertJsonCount(0, 'data.allocations');
+        $this->getJson($customerUrl.'/ledger', $headers)->assertOk()->assertJsonPath('meta.balance', '100.00')
+            ->assertJsonPath('data.0.running_balance', '100.00')->assertJsonPath('data.1.signed_amount', '0.00');
+        $this->postJson($customerUrl.'/receipts/'.$receiptId.'/reverse', ['reason' => 'Correct evidence'],
+            $headers + ['Idempotency-Key' => 'workspace-reverse-evidence'])->assertCreated()->assertJsonPath('data.reversal_of_id', $receiptId);
+        $this->postJson($supplierUrl.'/opening-status/confirm-zero', ['reason' => 'Reconciled', 'effective_at' => $date],
+            $headers + ['Idempotency-Key' => 'workspace-zero'])->assertCreated();
+        $this->getJson($supplierUrl.'/ledger', $headers)->assertOk()->assertJsonPath('meta.opening_status', 'confirmed_zero')
+            ->assertJsonPath('meta.balance', '0.00')->assertJsonCount(0, 'data');
+        $this->postJson($supplierUrl.'/opening-entries', array_replace($opening, ['effective_at' => now()->addDay()->toIso8601String()]),
+            $headers + ['Idempotency-Key' => 'workspace-future'])->assertUnprocessable();
+        $this->actingAs($cashier)->get('/workspace/suppliers')->assertForbidden();
+        $this->postJson($customerUrl.'/opening-entries', $opening, $headers + ['Idempotency-Key' => 'workspace-cashier-denied'])->assertForbidden();
+        $this->postJson($customerUrl.'/receipts/preview', $receipt, $headers)->assertForbidden();
+    }
+
     public function test_pos_holds_reprices_checks_out_and_returns_in_paired_workspace(): void
     {
         $this->withoutVite();
