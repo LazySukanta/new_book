@@ -624,7 +624,7 @@ For each row record Not started / In progress / Passed / Needs decision, test ev
 | M27 | Not started | |
 | M28 | Passed | Paired workspace, branch switch, responsive overview and stock. MySQL regression passed (14 tests, 93 assertions). Chrome checks passed at 360, 768 and 1440 px. [Task 025](../task_remark/M28/task025.md), [tests and screenshots](../task_remark/M28/test-results.md). |
 | M29 | Passed | Browser sign-in and scoped administration. Focused MySQL regression passed (18 tests, 177 assertions); Chrome sign-in verified on desktop and phone. [Task 026](../task_remark/M29/task026.md), [tests](../task_remark/M29/test-results.md). |
-| M30 | Not started | |
+| M30 | Passed | Catalogue, CSV and stock movement screens verified. MySQL regression passed (6 tests, 173 assertions); Chrome verified keyboard search and phone layout. [Task 027](../task_remark/M30/task027.md), [tests and screenshots](../task_remark/M30/test-results.md). |
 | M31 | Not started | |
 | M32 | Not started | |
 | M33 | Not started | |

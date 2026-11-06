@@ -46,6 +46,13 @@
             <p class="mt-1 mb-6 text-sm text-base-content/75">
                 {{ $section === 'stock' ? 'Current quantities for the active branch.' : 'See what is happening at your branch.' }}
             </p>
+            @if ($section === 'stock' && $branch)
+                <nav aria-label="Stock tools" class="mb-4 flex flex-wrap gap-2">
+                    <a class="btn btn-sm" href="{{ route('workspace.inventory', ['section' => 'low-stock']) }}">Low stock</a>
+                    <a class="btn btn-sm" href="{{ route('workspace.inventory', ['section' => 'ledger']) }}">Stock ledger</a>
+                    @can('stock.adjust')<a class="btn btn-sm" href="{{ route('workspace.inventory', ['section' => 'products']) }}">Choose product to adjust or count</a>@endcan
+                </nav>
+            @endif
             @if (! $branch)
                 <x-ui.feedback>No branch is available on this device. Ask an owner to check the branch and device access.</x-ui.feedback>
             @else
@@ -101,10 +108,18 @@
                                     <tr wire:key="product-{{ $row->product_id }}">
                                         <th scope="row" class="break-words font-semibold sm:min-w-36">
                                             {{ $row->name }}
-                                            <span class="mt-1 block text-xs font-normal text-base-content/75 sm:hidden">{{ $row->sku }}</span>
+                                            <span class="mt-1 block text-xs font-normal text-base-content/75 [overflow-wrap:anywhere] sm:hidden">{{ $row->sku }}</span>
                                         </th>
                                         <td class="hidden whitespace-nowrap sm:table-cell">{{ $row->sku }}</td>
-                                        <td class="text-right tabular-nums">{{ $row->qty }}</td>
+                                        <td class="text-right tabular-nums">
+                                            {{ $row->qty }}
+                                            @if ($row->qty < 0)
+                                                <span class="block text-xs text-error">Negative stock</span>
+                                            @endif
+                                            @if (!empty($row->valuation_provisional))
+                                                <span class="block text-xs">Estimated value</span>
+                                            @endif
+                                        </td>
                                         @if ($canSeeValue)<td class="text-right"><x-ui.money :amount="$row->value" /></td>@endif
                                     </tr>
                                 @empty

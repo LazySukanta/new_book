@@ -44,7 +44,7 @@ final class StockAdjustmentController
     {
         abort_unless($request->user()->can('stock.adjust'), 403);
         $kind = $count ? 'count_correction' : 'adjustment';
-        $items = $count ? 'product_id,counted_qty,unit_cost,expected_last_ledger_id' : 'product_id,qty_change,unit_cost';
+        $items = $count ? 'product_id,counted_qty,unit_cost,expected_last_ledger_id' : 'product_id,qty_change,unit_cost,expected_last_ledger_id';
         $rules = [
             'reason' => 'required|string|max:255',
             'note' => 'sometimes|nullable|string|max:2000',
@@ -62,6 +62,7 @@ final class StockAdjustmentController
             $rules['items.*.expected_last_ledger_id'] = 'present|nullable|integer|min:1';
         } else {
             $rules['items.*.qty_change'] = 'required|string';
+            $rules['items.*.expected_last_ledger_id'] = 'sometimes|nullable|integer|min:1';
         }
         $data = $request->validate($rules);
         foreach ($data['items'] as &$item) {

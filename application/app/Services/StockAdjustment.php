@@ -44,7 +44,7 @@ final class StockAdjustment
             $scope = ['tenant_id' => $actor->tenant_id, 'branch_id' => $branch->id, 'product_id' => $product->id];
             $balance = $projection->lock($scope);
             $decimal = (bool) $units[$product->unit_id];
-            if ($kind === 'count_correction' && ($item['expected_last_ledger_id'] ?? null) !== $balance->last_ledger_id) {
+            if (($kind === 'count_correction' || array_key_exists('expected_last_ledger_id', $item)) && ($item['expected_last_ledger_id'] ?? null) !== $balance->last_ledger_id) {
                 throw new HttpResponseException(ApiResponse::conflict('STALE_STOCK_COUNT', 'Stock changed after this count began. Refresh and confirm the new balance.'));
             }
             if ($kind === 'opening' && $this->hasOpening($branch->id, $product->id)) {
@@ -66,6 +66,24 @@ final class StockAdjustment
         app(PostingAudit::class)->record($request, 'stock.adjusted', 'stock_adjustment', $id, null, ['kind' => $kind, 'items' => $results], $reason);
 
         return ['id' => $id, 'kind' => $kind, 'reason' => $reason, 'posted_at' => $now, 'items' => $results];
+    }
+
+    public function preview(Request $request, string $kind, array $item): array
+    {
+        abort_unless($request->user()->can('stock.adjust'), 403);
+        $branch = $request->attributes->get('branch');
+        $product = Product::where('tenant_id', $branch->tenant_id)->findOrFail($item['product_id']);
+        $balance = DB::table('stock_balances')->where(['tenant_id' => $branch->tenant_id, 'branch_id' => $branch->id, 'product_id' => $product->id])->first()
+            ?? (object) ['qty' => '0.000', 'inventory_value' => '0.00', 'avg_cost' => '0.000000000', 'last_ledger_id' => null];
+        $decimal = (bool) DB::table('units')->where('id', $product->unit_id)->value('allow_decimal');
+
+        $preview = $this->calculate($kind, $item, $balance, $decimal);
+
+        return $preview + [
+            'last_ledger_id' => $balance->last_ledger_id,
+            'avg_cost_before' => $balance->avg_cost,
+            'avg_cost_after' => (string) app(StockProjection::class)->average(BigDecimal::of($preview['qty_after']), BigDecimal::of($preview['value_after'])),
+        ];
     }
 
     public function openingItem(int $product, string $quantity, string $unitCost, bool $decimal): array

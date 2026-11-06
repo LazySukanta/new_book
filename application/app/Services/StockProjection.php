@@ -19,7 +19,7 @@ final class StockProjection
             Money::quantity((string) $quantity->abs());
         }
 
-        $average = $quantity->isPositive() ? $value->dividedBy($quantity, 9, RoundingMode::HalfUp) : BigDecimal::zero()->toScale(9);
+        $average = $this->average($quantity, $value);
         $ledger = $scope + $movement;
         $id = DB::table('stock_ledger')->insertGetId($ledger);
         DB::table('stock_balances')->where($scope)->update([
@@ -29,6 +29,11 @@ final class StockProjection
         ]);
 
         return (object) ($ledger + ['id' => $id]);
+    }
+
+    public function average(BigDecimal $quantity, BigDecimal $value): BigDecimal
+    {
+        return $quantity->isPositive() ? $value->dividedBy($quantity, 9, RoundingMode::HalfUp) : BigDecimal::zero()->toScale(9);
     }
 
     public function lock(array $scope): object
