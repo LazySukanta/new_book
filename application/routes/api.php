@@ -11,6 +11,7 @@ use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\DocumentSeriesController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\PurchaseCorrectionController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\SaleCorrectionController;
 use App\Http\Controllers\SaleReturnController;
@@ -47,6 +48,11 @@ Route::prefix('v1')->group(function () {
         Route::match(['post', 'put', 'patch'], 'settings', [ShopSettingsController::class, 'update']);
         Route::get('settings/logo', [ShopSettingsController::class, 'logo']);
         Route::middleware(ResolveBranch::class)->group(function () {
+            Route::get('dashboard', [ReportController::class, 'show'])->defaults('report', 'dashboard');
+            Route::get('reports/{report}', [ReportController::class, 'show'])->whereIn('report', [
+                'daily-sales', 'sales-by-product', 'sales-by-cashier', 'stock-valuation', 'low-stock',
+                'customer-outstanding', 'supplier-outstanding', 'payments', 'profit',
+            ]);
             Route::get('document-series', [DocumentSeriesController::class, 'index']);
             Route::post('document-series', [DocumentSeriesController::class, 'store']);
             Route::post('sales', [SaleController::class, 'store']);

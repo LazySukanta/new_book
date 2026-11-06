@@ -27,8 +27,9 @@ Updated 6 November 2026. Source plan: [MILESTONES](../docs/MILESTONES.md).
 | task021 | M20b | Invoice JSON and stored snapshots | Complete | [Remark](M20b/task021.md), [tests](M20b/test-results.md) |
 | task022 | M20c | Partial/full returns and credit notes | Complete | [Remark](M20c/task022.md), [tests](M20c/test-results.md) |
 | task023 | M21 | Sale cancellation, credit-note reversal and invoice comments | Complete | [Remark](M21/task023.md), [tests](M21/test-results.md) |
+| task024 | M25-R1 | Basic operational reports and dashboard API | Complete | [Remark](M25/task024.md), [tests](M25/test-results.md) |
 
-Use globally increasing task numbers. On completion, write scope, changed files, actual checks, limitations and next step in the milestone folder. Keep test evidence alongside remarks. Never store credentials or tokens. Passing partial checks do not complete a milestone.
+Use globally increasing task numbers. On completion, write scope, changed files, actual checks, limitations and next step in the milestone folder. Keep test evidence alongside remarks. Never store credentials or tokens. Passing partial checks do not complete a milestone. Commit each completed milestone or release slice after recording its verification.
 
 Work through the release plan one milestone at a time. Start the next eligible milestone automatically once the current milestone is complete and its required tests pass.
 

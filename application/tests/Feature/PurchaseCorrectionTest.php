@@ -148,6 +148,9 @@ class PurchaseCorrectionTest extends TestCase
         $this->assertDatabaseCount('stock_ledger', 1);
         $this->getJson('/api/v1/suppliers/'.$this->supplier.'/ledger', $this->headers)->assertOk()->assertJsonPath('meta.balance', '-800.00');
         $this->getJson('/api/v1/suppliers/'.$newSupplier.'/ledger', $this->headers)->assertOk()->assertJsonPath('meta.balance', '1000.00');
+        $this->getJson('/api/v1/reports/supplier-outstanding', $this->headers)->assertOk()
+            ->assertJsonPath('data.0.supplier_id', $newSupplier)->assertJsonPath('data.0.balance', '1000.00')
+            ->assertJsonPath('data.1.supplier_id', $this->supplier)->assertJsonPath('data.1.balance', '-800.00');
         $this->getJson('/api/v1/suppliers/'.$this->supplier.'/ledger?recorded_as_of='.urlencode($cutoff), $this->headers)->assertOk()->assertJsonPath('meta.balance', '200.00');
         $this->getJson('/api/v1/suppliers/'.$this->supplier.'/ledger?as_of='.urlencode($cutoff), $this->headers)->assertOk()->assertJsonPath('meta.balance', '200.00');
     }

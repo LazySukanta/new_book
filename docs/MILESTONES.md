@@ -619,7 +619,7 @@ For each row record Not started / In progress / Passed / Needs decision, test ev
 | M22 | Not started | |
 | M23 | Not started | |
 | M24 | Not started | |
-| M25 | Not started | |
+| M25 | In progress | R1 passed. Focused MySQL checks passed (2 tests, 293 assertions). [Task 024](../task_remark/M25/task024.md), [tests](../task_remark/M25/test-results.md). R2 transfer reporting is pending. |
 | M26 | Not started | |
 | M27 | Not started | |
 | M28 | Not started | |

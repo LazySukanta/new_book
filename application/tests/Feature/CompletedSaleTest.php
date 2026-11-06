@@ -128,6 +128,28 @@ class CompletedSaleTest extends TestCase
         unset($beforeInvoice['settlement'], $afterInvoice['settlement']);
         $this->assertSame($beforeInvoice, $afterInvoice);
         $product->forceFill(['name' => 'Book', 'retail_price' => '100.00'])->save();
+        $report = fn (string $path) => $this->getJson('/api/v1/'.$path, $headers)->assertOk();
+        $report('reports/daily-sales')->assertJsonPath('data.0.net', '180.00')
+            ->assertJsonPath('data.0.credit', '60.00')->assertJsonPath('data.0.collected_by_mode.cash', '125.00')
+            ->assertJsonPath('data.0.collected_by_mode.upi', '10.00');
+        $report('reports/sales-by-product')->assertJsonPath('data.0.total', '180.00')
+            ->assertJsonPath('data.0.cost', '60.00')->assertJsonPath('data.0.qty', '2.000');
+        $report('reports/sales-by-cashier')->assertJsonPath('data.0.cashier_id', $owner->id)->assertJsonPath('data.0.total', '180.00');
+        $report('reports/stock-valuation')->assertJsonPath('data.0.qty', '-2.000')->assertJsonPath('data.0.value', '-60.00');
+        $report('reports/low-stock')->assertJsonPath('data.0.product_id', $product->id);
+        $report('reports/customer-outstanding')->assertJsonPath('data.0.balance', '45.00')
+            ->assertJsonPath('data.0.opening_balance_incomplete', 1);
+        $report('reports/supplier-outstanding')->assertJsonCount(0, 'data');
+        $report('reports/payments')->assertJsonCount(4, 'data');
+        $report('reports/profit')->assertJsonPath('data.gross_profit', '120.00')->assertJsonPath('data.estimated_cogs', '60.00');
+        $report('dashboard')->assertJsonPath('data.sales.total', '180.00')->assertJsonPath('data.customer_dues.outstanding', '45.00');
+        $this->getJson('/api/v1/dashboard', $otherHeaders)->assertOk()->assertJsonPath('data.sales.total', '0.00');
+        $report('reports/daily-sales?from=2020-01-01&to=2020-01-01')->assertJsonCount(0, 'data');
+        $issuedAt = DB::table('sales')->where('id', $hold)->value('issued_at');
+        DB::table('sales')->where('id', $hold)->update(['issued_at' => '2025-04-01 18:30:00']);
+        $report('reports/daily-sales?from=2025-04-01')->assertJsonCount(0, 'data');
+        $report('reports/daily-sales?from=2025-04-02')->assertJsonPath('data.0.net', '100.00');
+        DB::table('sales')->where('id', $hold)->update(['issued_at' => $issuedAt]);
         $openingCredit = $this->postJson("$url/opening-entries", [
             'entry_type' => 'credit', 'amount' => '10.00', 'effective_at' => '2020-02-01', 'reason' => 'Legacy credit',
         ], $headers + ['Idempotency-Key' => 'old-credit'])->assertCreated()->json('data.id');
@@ -218,6 +240,7 @@ class CompletedSaleTest extends TestCase
             ->assertOk()->assertJsonPath('data.status', 'discarded');
         $this->assertDatabaseHas('sales', ['id' => $discarded, 'status' => 'discarded', 'invoice_no' => null]);
         $this->getJson('/api/v1/sales/held', $headers)->assertOk()->assertJsonCount(0, 'data');
+        $beforeReturnNet = $report('reports/daily-sales')->json('data.0.net');
         $product->forceFill(['retail_price' => '10.00'])->save();
         $returnCart = ['items' => [['product_id' => $product->id, 'qty' => '3']],
             'bill_discount' => ['type' => 'amount', 'value' => '0.01']];
@@ -245,6 +268,7 @@ class CompletedSaleTest extends TestCase
         $this->postJson($returnUrl, $returnPayload, $headers + ['Idempotency-Key' => 'over-return'])->assertUnprocessable();
         $this->assertSame('29.99', (string) DB::table('sale_returns')->where('sale_id', $returnSale['id'])->sum('total'));
         $this->assertSame('29.99', (string) DB::table('payments')->where('purpose', 'refund')->sum('amount'));
+        $report('reports/daily-sales')->assertJsonPath('data.0.net', $beforeReturnNet);
         $product->forceFill(['retail_price' => '100.00'])->save();
         $this->postJson('/api/v1/sales/'.$returnSale['id'].'/cancel', ['reason' => 'Already returned'],
             $headers + ['Idempotency-Key' => 'cancel-returned-sale'])->assertConflict();
@@ -310,6 +334,23 @@ class CompletedSaleTest extends TestCase
         $post($missing, 'missing-type', $headers)->assertConflict()->assertJsonPath('code', 'DOCUMENT_SERIES_UNAVAILABLE');
         $this->assertDatabaseHas('document_series', ['branch_id' => $branch->id, 'prefix' => 'C', 'next_number' => 1]);
         $this->artisan('stock:reconcile')->assertSuccessful();
+
+        $cashier = User::factory()->create(['tenant_id' => $tenant, 'password' => 'test-password-123']);
+        $cashier->assignRole('Cashier');
+        $cashier->branches()->attach($branch, ['tenant_id' => $tenant]);
+        $cashierPair = app(DeviceEnrollment::class)->register($owner, 'Cashier terminal', [$branch->id]);
+        $this->app['auth']->forgetGuards();
+        $cashierToken = $this->postJson('/api/v1/auth/token', [
+            'email' => $cashier->email, 'password' => 'test-password-123', 'pairing_code' => $cashierPair['pairing_code'],
+        ])->assertOk()->json('data.token');
+        $this->app['auth']->forgetGuards();
+        $cashierHeaders = array_replace($headers, ['Authorization' => 'Bearer '.$cashierToken]);
+        $this->getJson('/api/v1/reports/daily-sales', $cashierHeaders)->assertOk()->assertJsonCount(0, 'data');
+        DB::table('sales')->where('id', $raceHold)->update(['cashier_id' => $cashier->id]);
+        $this->getJson('/api/v1/reports/daily-sales', $cashierHeaders)->assertOk()->assertJsonPath('data.0.net', '100.00');
+        $this->getJson('/api/v1/reports/daily-sales', array_replace($cashierHeaders, ['X-Branch-Id' => $other->id]))->assertNotFound();
+        $this->getJson('/api/v1/reports/profit', $cashierHeaders)->assertForbidden();
+        $this->getJson('/api/v1/dashboard', $cashierHeaders)->assertForbidden();
     }
 
     private function race(array $jobs, string $lockTable, int $lockId): array
