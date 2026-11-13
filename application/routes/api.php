@@ -47,8 +47,20 @@ Route::prefix('v1')->group(function () {
         Route::get('settings/logo', [ShopSettingsController::class, 'logo']);
         Route::middleware(ResolveBranch::class)->group(function () {
             Route::get('dashboard', [ReportController::class, 'show'])->defaults('report', 'dashboard');
+            Route::get('audit-events', [\App\Http\Controllers\AuditController::class, 'index']);
+            Route::get('audit-events/export', [\App\Http\Controllers\ReportExportController::class, 'audit']);
+            Route::get('audit-events/{audit}', [\App\Http\Controllers\AuditController::class, 'show'])->whereNumber('audit');
             Route::get('reports/{report}', [ReportController::class, 'show'])->whereIn('report', ReportController::TABLES);
+            Route::get('reports/{report}/export', [\App\Http\Controllers\ReportExportController::class, 'download'])->whereIn('report', ReportController::TABLES);
             Route::get('document-series', [DocumentSeriesController::class, 'index']);
+            Route::get('stock-transfers', [\App\Http\Controllers\StockTransferController::class, 'index']);
+            Route::get('stock-transfers/{transfer}', [\App\Http\Controllers\StockTransferController::class, 'show'])->whereNumber('transfer');
+            Route::post('stock-transfers', [\App\Http\Controllers\StockTransferController::class, 'save']);
+            Route::patch('stock-transfers/{transfer}', [\App\Http\Controllers\StockTransferController::class, 'save'])->whereNumber('transfer');
+            Route::post('stock-transfers/{transfer}/dispatch', [\App\Http\Controllers\StockTransferController::class, 'dispatch'])->whereNumber('transfer');
+            Route::post('stock-transfers/{transfer}/receive', [\App\Http\Controllers\TransferReceiptController::class, 'receive'])->whereNumber('transfer');
+            Route::post('stock-transfers/{transfer}/resolutions', [\App\Http\Controllers\TransferReceiptController::class, 'resolve'])->whereNumber('transfer');
+            Route::delete('stock-transfers/{transfer}', [\App\Http\Controllers\StockTransferController::class, 'destroy'])->whereNumber('transfer');
             Route::post('document-series', [DocumentSeriesController::class, 'store']);
             Route::post('sales', [SaleController::class, 'store']);
             Route::get('sales/held', [SaleController::class, 'held']);
@@ -65,6 +77,7 @@ Route::prefix('v1')->group(function () {
                 fn () => ApiResponse::data($pricing->calculate($request->user(), $request->attributes->get('branch'), $request->all()))
             ));
             Route::get('purchases', [PurchaseController::class, 'index']);
+            Route::post('purchases/{purchase}/returns', [\App\Http\Controllers\PurchaseReturnController::class, 'store'])->whereNumber('purchase');
             Route::post('purchases', [PurchaseController::class, 'store']);
             Route::get('purchases/{purchase}', [PurchaseController::class, 'show'])->whereNumber('purchase');
             Route::post('purchases/{purchase}/revision-preview', [PurchaseCorrectionController::class, 'handle'])->defaults('operation', 'preview')->whereNumber('purchase');

@@ -81,6 +81,33 @@ final class WorkspacePurchaseController
         return redirect()->route('workspace.purchases.detail', ['purchase' => $body['data']['id']])->with('purchase.message', 'Purchase recorded.');
     }
 
+    public function returnGoods(Request $request, int $purchase): RedirectResponse
+    {
+        $this->branch($request);
+        $request->validate(['key' => 'required|uuid', 'items' => 'required|array']);
+        $request->merge(['items' => array_values(array_filter($request->input('items'),
+            fn ($line) => is_array($line) && isset($line['qty']) && $line['qty'] !== '' && $line['qty'] !== '0'))]);
+        $request->headers->set('Idempotency-Key', $request->input('key'));
+        try {
+            $response = app(PurchaseReturnController::class)->store($request, $purchase, app(PostingTransaction::class));
+        } catch (HttpResponseException $exception) {
+            $response = $exception->getResponse();
+        } catch (HttpExceptionInterface $exception) {
+            if (! in_array($exception->getStatusCode(), [409, 422], true)) {
+                throw $exception;
+            }
+            return back()->withInput()->withErrors(['return' => $exception->getMessage()]);
+        }
+        if (! $response->isSuccessful()) {
+            return back()->withInput()->withErrors(['return' => $response->getData(true)['message']]);
+        }
+        if ($request->routeIs('workspace.purchases.return-preview')) {
+            return back()->withInput()->with('purchase.return_preview', $response->getData(true)['data']);
+        }
+        return redirect()->route('workspace.purchases.detail', $purchase)
+            ->with('purchase.message', 'Supplier return '.$response->getData(true)['data']['document_no'].' posted.');
+    }
+
     public function supplier(Request $request): RedirectResponse
     {
         $this->branch($request);

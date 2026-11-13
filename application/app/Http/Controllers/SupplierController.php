@@ -103,7 +103,11 @@ final class SupplierController
                 ->select('purchases.id', 'purchases.received_at as effective_at', 'revision.correction_posted_at as created_at')
                 ->selectRaw("JSON_UNQUOTE(JSON_EXTRACT(revision.after_snapshot, '$.supplier_invoice_no')) AS reference, CAST(JSON_UNQUOTE(JSON_EXTRACT(revision.after_snapshot, '$.total')) AS DECIMAL(18,2)) AS signed_amount")
                 ->selectRaw("'purchase' AS source, 'purchase' AS kind");
-            $entries = DB::query()->fromSub($opening->unionAll($payments)->unionAll($purchases), 'events');
+            $returns = DB::table('purchase_returns as returned')->join('purchases', 'purchases.id', '=', 'returned.purchase_id')
+                ->where(['purchases.tenant_id' => $branch->tenant_id, 'purchases.branch_id' => $branch->id, 'purchases.supplier_id' => $supplier])
+                ->select('returned.id', 'returned.issued_at as effective_at', 'returned.issued_at as created_at', 'returned.document_no as reference')
+                ->selectRaw("-returned.total AS signed_amount, 'purchase_return' AS source, 'purchase_return' AS kind");
+            $entries = DB::query()->fromSub($opening->unionAll($payments)->unionAll($purchases)->unionAll($returns), 'events');
             if (isset($filters['as_of'])) {
                 $entries->where('effective_at', '<=', $posting->date($filters['as_of']));
             }

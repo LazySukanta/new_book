@@ -19,6 +19,7 @@
                     <input class="input w-full border-base-300!" id="password" name="password" type="password" autocomplete="current-password" required
                         @if ($errors->has('password') && ! $errors->has('email')) autofocus aria-invalid="true" aria-describedby="password-error" @endif>
                 </x-ui.field>
+                @if (config('auth.browser_pairing_required'))
                 <x-ui.field id="pairing-code" label="Pairing code" :error="$errors->first('pairing_code')">
                     <input class="input w-full border-base-300!" id="pairing-code" name="pairing_code" autocomplete="off" spellcheck="false" maxlength="128"
                         @if (! request()->cookie('shop_device')) required @endif
@@ -32,14 +33,15 @@
                         @endif
                     </p>
                 </x-ui.field>
+                @endif
                 <button type="submit" class="btn btn-primary mt-1">Sign in</button>
             </form>
-            @unless (request()->cookie('shop_device'))
+            @if (config('auth.browser_pairing_required') && ! request()->cookie('shop_device'))
                 <details class="mt-5 border-t border-base-300 pt-4 text-sm">
                     <summary class="cursor-pointer font-semibold">Setting up this shop?</summary>
                     <p class="mt-2 text-base-content/75">On the shop computer, run <code>php artisan shop:setup</code> from the application folder to create the first owner and get a pairing code.</p>
                 </details>
-            @endunless
+            @endif
         </section>
     </main>
 </x-workspace.layout>

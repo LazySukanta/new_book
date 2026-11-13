@@ -49,7 +49,10 @@ final class PurchaseController
         abort_if($record->status === 'deleted' && ! $request->user()->hasRole('Owner'), 403);
 
         return ApiResponse::data((array) $record + [
-            'items' => DB::table('purchase_items')->where('purchase_id', $purchase)->where('is_removed', false)->orderBy('id')->get(),
+            'returns' => DB::table('purchase_returns')->where('purchase_id', $purchase)->orderByDesc('id')->get(),
+            'items' => DB::table('purchase_items')->where('purchase_id', $purchase)->where('is_removed', false)
+                ->select('purchase_items.*')->selectRaw('qty - COALESCE((SELECT SUM(returned.qty) FROM purchase_return_items AS returned WHERE returned.purchase_item_id = purchase_items.id), 0) AS returnable_qty')
+                ->orderBy('id')->get(),
         ]);
     }
 

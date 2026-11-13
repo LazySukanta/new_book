@@ -2,6 +2,9 @@ import './pos';
 import './invoice';
 import './parties';
 import './reports';
+import transferDraft from './transfers';
+
+window.transferDraft = transferDraft;
 
 document.addEventListener('click', (event) => {
     const opener = event.target.closest('[data-open-dialog]');

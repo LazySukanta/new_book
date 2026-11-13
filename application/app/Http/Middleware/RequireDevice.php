@@ -32,6 +32,7 @@ class RequireDevice
         }
         $device = Device::where('tenant_id', $user->tenant_id)->where('status', 'active')->find($deviceId);
         abort_unless($device, 403, 'Device authorization failed.');
+        abort_if($device->password_only && ($isBearer || config('auth.browser_pairing_required')), 403, 'Device pairing is required.');
 
         return $device;
     }

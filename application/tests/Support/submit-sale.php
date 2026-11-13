@@ -12,7 +12,11 @@ if (! $app->environment('testing') || DB::connection()->scalar('select database(
     throw new LogicException('Sale worker requires the dedicated MySQL test database.');
 }
 $input = json_decode(stream_get_contents(STDIN), true, flags: JSON_THROW_ON_ERROR);
-$request = Request::create('/api/v1/sales', 'POST', server: [
+$path = $input['path'] ?? '/api/v1/sales';
+if (! preg_match('#\A/api/v1/(sales|stock-transfers/[0-9]+/(dispatch|receive|resolutions)|purchases/[0-9]+/returns)\z#', $path)) {
+    throw new LogicException('Unsupported posting worker path.');
+}
+$request = Request::create($path, 'POST', server: [
     'HTTP_AUTHORIZATION' => 'Bearer '.$input['token'], 'HTTP_X_BRANCH_ID' => $input['branch'],
     'HTTP_IDEMPOTENCY_KEY' => $input['key'], 'HTTP_ACCEPT' => 'application/json', 'CONTENT_TYPE' => 'application/json',
 ], content: json_encode($input['data'], JSON_THROW_ON_ERROR));

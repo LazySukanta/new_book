@@ -26,6 +26,12 @@ Route::post('/sign-in', [AuthenticationController::class, 'login'])
 Route::post('/sign-out', [AuthenticationController::class, 'logout'])
     ->middleware('auth:web')->name('session.sign-out');
 Route::middleware(['auth:web', RequireDevice::class])->group(function () {
+    Route::get('/workspace/audit-export', [\App\Http\Controllers\WorkspaceAuditController::class, 'download'])->name('workspace.audit-export');
+    Route::get('/workspace/audit/{audit?}', [\App\Http\Controllers\WorkspaceAuditController::class, 'show'])->whereNumber('audit')->name('workspace.audit');
+    Route::get('/workspace/transfers/products', [\App\Http\Controllers\WorkspaceTransferController::class, 'products'])->name('workspace.transfers.products');
+    Route::get('/workspace/transfers/{transfer?}', [\App\Http\Controllers\WorkspaceTransferController::class, 'show'])->whereNumber('transfer')->name('workspace.transfers');
+    Route::post('/workspace/transfers/actions/{operation}/{transfer?}', [\App\Http\Controllers\WorkspaceTransferController::class, 'post'])
+        ->whereIn('operation', ['save', 'dispatch', 'delete', 'receive', 'resolve'])->whereNumber('transfer')->name('workspace.transfers.post');
     Route::view('/workspace', 'workspace', ['section' => 'overview'])->name('workspace');
     Route::prefix('workspace/pos')->middleware('can:sales.create')->group(function () {
         Route::view('/', 'workspace', ['section' => 'pos'])->name('workspace.pos');
@@ -52,6 +58,8 @@ Route::middleware(['auth:web', RequireDevice::class])->group(function () {
         ->whereNumber(['branch', 'return'])->name('workspace.pos.credit-note');
     Route::view('/workspace/stock', 'workspace', ['section' => 'stock'])->name('workspace.stock');
     Route::view('/workspace/reports', 'workspace', ['section' => 'reports'])->name('workspace.reports');
+    Route::get('/workspace/report-export/{report}', [\App\Http\Controllers\ReportExportController::class, 'download'])
+        ->whereIn('report', ReportController::TABLES)->middleware(ResolveBranch::class)->name('workspace.report-export');
     Route::get('/workspace/report-data/{report}', [ReportController::class, 'show'])
         ->whereIn('report', ['dashboard', ...ReportController::TABLES])->middleware(ResolveBranch::class);
     Route::view('/workspace/customers', 'workspace', ['section' => 'customers'])->name('workspace.customers');
@@ -79,6 +87,8 @@ Route::middleware(['auth:web', RequireDevice::class])->group(function () {
         Route::get('/new', [WorkspacePurchaseController::class, 'show'])->defaults('section', 'create')->name('create');
         Route::post('/', [WorkspacePurchaseController::class, 'create'])->name('store');
         Route::post('/supplier', [WorkspacePurchaseController::class, 'supplier'])->name('supplier');
+        Route::post('/{purchase}/returns/preview', [WorkspacePurchaseController::class, 'returnGoods'])->whereNumber('purchase')->name('return-preview');
+        Route::post('/{purchase}/returns', [WorkspacePurchaseController::class, 'returnGoods'])->whereNumber('purchase')->name('return-store');
         Route::get('/{purchase}', [WorkspacePurchaseController::class, 'show'])->defaults('section', 'detail')->whereNumber('purchase')->name('detail');
         Route::get('/{purchase}/correct', [WorkspacePurchaseController::class, 'show'])->defaults('section', 'correct')->whereNumber('purchase')->name('correct');
         Route::get('/{purchase}/history', [WorkspacePurchaseController::class, 'show'])->defaults('section', 'history')->whereNumber('purchase')->name('history');

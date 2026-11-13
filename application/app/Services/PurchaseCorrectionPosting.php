@@ -112,9 +112,9 @@ final class PurchaseCorrectionPosting
             $newCost = $new['inventory_unit_cost'] ?? $oldCost;
             $scope = ['tenant_id' => $actor->tenant_id, 'branch_id' => $branch->id, 'product_id' => $productId];
             $balance = DB::table('stock_balances')->where($scope)->lockForUpdate()->first();
-            // shortcut: R1 has no supplier returns; load linked return quantities and supplier dependencies when M22 enables them.
+            $returnedQty = $old ? (string) DB::table('purchase_return_items')->where('purchase_item_id', $old->id)->sum('qty') : '0.000';
             $effect = app(PurchaseCorrectionPreview::class)->line(
-                ['qty' => $oldQty, 'unit_cost' => $oldCost, 'returned_qty' => '0.000'],
+                ['qty' => $oldQty, 'unit_cost' => $oldCost, 'returned_qty' => $returnedQty],
                 ['qty' => $newQty, 'unit_cost' => $newCost],
                 ['qty' => $balance?->qty ?? '0.000', 'value' => $balance?->inventory_value ?? '0.00'], $confirmations[$productId] ?? null);
             if (BigDecimal::of($oldQty)->isEqualTo($newQty) && BigDecimal::of($oldCost)->isEqualTo($newCost)) {
@@ -157,7 +157,11 @@ final class PurchaseCorrectionPosting
         if (! $paid->isEqualTo($purchase->paid_amount)) {
             $this->conflict('PURCHASE_ALLOCATION_CONFLICT', 'Reconcile the purchase payment allocations before correction.');
         }
-        $settlement = app(PurchaseCorrectionPreview::class)->settlement($purchase->supplier_id, $supplierId, $purchase->total, $after['total'], (string) $paid, false);
+        $returnTotal = BigDecimal::of(DB::table('purchase_returns')->where('purchase_id', $id)->sum('total'));
+        abort_if(BigDecimal::of($after['total'])->isLessThan($returnTotal), 422, 'The revised purchase total cannot be below retained supplier returns.');
+        $settlement = app(PurchaseCorrectionPreview::class)->settlement($purchase->supplier_id, $supplierId,
+            (string) BigDecimal::of($purchase->total)->minus($returnTotal), (string) BigDecimal::of($after['total'])->minus($returnTotal),
+            (string) $paid, DB::table('purchase_returns')->where('purchase_id', $id)->exists());
         $after['paid_amount'] = $settlement['retained_allocation'];
         $after['balance_amount'] = $settlement['resulting_payable'];
         $changes = [];

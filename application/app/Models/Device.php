@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Device extends Model
 {
+    protected $attributes = ['status' => 'active'];
+
     public $timestamps = false;
 
     protected $guarded = ['id'];

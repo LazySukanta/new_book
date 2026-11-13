@@ -1,6 +1,6 @@
 # POS & Inventory
 
-Laravel 13 POS and inventory project. M01–M17 are complete, including supplier accounts, purchase posting and corrections, customer settlement, and sales pricing and GST preview. M18 — Complete document numbering — is next.
+Laravel 13 POS and inventory project. Release 1 has been built and rehearsed on staging; shop acceptance and the go-live decision remain pending. Local Release 2 work now includes supplier returns, branch transfers, historical/GST reporting, Excel exports and the owner audit viewer. Release 2 hardening is next. See `docs/MILESTONES.md` for verified slices and remaining gates; local changes are not automatically deployed.
 
 ## Layout
 
@@ -24,7 +24,7 @@ Read the three documents in `docs/` before implementation. Precedence: `RULES.md
 
 ## Local setup
 
-Run commands from `application/`. Use PHP 8.3 or later with PDO MySQL, mbstring, OpenSSL, cURL and ZIP, Composer 2, MySQL 8, Node and npm. On Windows, `npm.cmd` works in PowerShell.
+Run commands from `application/`. Use PHP 8.3 or later with PDO MySQL, mbstring, OpenSSL, cURL, ZIP and GD (required by the Excel library), Composer 2, MySQL 8, Node and npm. On Windows, `npm.cmd` works in PowerShell.
 
 1. Create `khatapos_dev` and `khatapos_test` in your local MySQL instance. Give each a separate login limited to its own database.
 2. Copy `.env.example` to `.env` and `.env.testing`. Enter the local MySQL host, port and matching credentials in each. Set `APP_ENV=testing` and `DB_DATABASE=khatapos_test` in `.env.testing`. These files are ignored by Git.
@@ -50,13 +50,17 @@ Run `php artisan shop:setup` locally after migrations. It prompts for the first 
 
 If the code expires before pairing, `php artisan shop:pair-device` requires the owner's email/password and approves a new browser for all active branches. An authenticated owner can instead approve a browser for selected branches using `POST /api/v1/devices` with `name` and `branch_ids`. Revoke unused devices using `DELETE /api/v1/devices/{id}`.
 
-Browser flow: GET `/auth/csrf`, then POST `/auth/login` with email, password, initial pairing_code and the CSRF token. Retain cookies. The server issues an encrypted HttpOnly device cookie and rotates the session. Later logins use credentials and the device cookie without reusing the pairing code. GET `/auth/me` inspects the current session; POST `/auth/logout` ends it. Stateful API requests need the configured Sanctum origin and CSRF protection. Use HTTPS and secure cookies in deployment.
+Browser pairing is temporarily disabled with `AUTH_BROWSER_PAIRING_REQUIRED=false`: email/password sign-in enrolls a browser automatically using the staff member's permitted branches. Set it to `true` and refresh the configuration cache to restore owner-approved pairing. Password-only browser sessions then require fresh pairing; normal API token enrollment still requires an approved one-time code.
+
+Browser flow: GET `/auth/csrf`, then POST `/auth/login` with email, password and the CSRF token; include an initial `pairing_code` when browser pairing is enabled. Retain cookies. The server issues an encrypted HttpOnly device cookie and rotates the session. Later approved-browser logins use credentials and that cookie. GET `/auth/me` inspects the current session; POST `/auth/logout` ends it. Stateful API requests need the configured Sanctum origin and CSRF protection. Use HTTPS and secure cookies in deployment.
 
 API demonstration: POST `/api/v1/auth/token` with email, password and a fresh approved pairing_code. A code can be consumed once, by either session enrollment or token enrollment. The returned bearer token expires after 30 days. Send it in Authorization to `GET /api/v1/auth/me`, or to `GET /api/v1/branch` with X-Branch-Id. POST `/api/v1/auth/logout` revokes that token. Send Accept: application/json. Token renewal/re-pairing currently requires fresh owner approval. Browser UI uses sessions, never localStorage bearer tokens.
 
 All current device enrollment is for the web channel, derived server-side. Native apps, their channel provisioning and offline synchronization remain out of scope. Security events record metadata without credentials, pairing codes or token contents. Posting operations use audited transactions and idempotency.
 
 ## Staging on Hestia
+
+Read [server access and deployment boundaries](docs/operations/SERVER_ACCESS.md) before connecting or deploying. SSH uses `ubuntu@51.222.29.250`; the Hestia site account is `kagajghar02`. Other applications and their databases must remain untouched.
 
 The staging UI is at [pos.kagajghar.com](https://pos.kagajghar.com). Run build and Artisan commands from `application/`. Deploy a Git release with `npm ci` and `npm run build` assets, then run `composer install --no-dev --prefer-dist --optimize-autoloader`, `php artisan migrate --force`, `php artisan config:cache`, and `php artisan view:cache` as the site account. Run the access seeder when creating a fresh database and use `php artisan shop:setup` for first-owner enrollment.
 
@@ -74,4 +78,6 @@ The portable MySQL server uses `C:\Users\local User\AppData\Local\KhataPOS\mysql
 
 Completion remarks and verification evidence are indexed in [task_remark](task_remark/README.md).
 
-The [M14 manual test guide](task_remark/M14/manual-tests.md) covers purchase corrections. The [M17 notes](task_remark/M17/task017.md) cover sales pricing previews. Latest full suite: 47 tests, 678 assertions passed.
+The [M14 manual test guide](task_remark/M14/manual-tests.md) covers purchase corrections. The [M17 notes](task_remark/M17/task017.md) cover sales pricing previews. Current regression counts and browser evidence are recorded in the [milestone ledger](docs/MILESTONES.md).
+
+Excel exports preserve monetary decimals and identifiers as explicit text, protect formula-like user text, read reports in chunks and reject results above 50,000 rows. A private per-export cache and an available-memory check protect the request. Apply narrower filters if a wide report exceeds the available memory. Export files and cell caches stay outside the public web root. Before the next deployment, verify GD is enabled for the site's PHP CLI and FPM runtime; these dependency changes currently exist only locally.

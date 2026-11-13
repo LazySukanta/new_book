@@ -1,5 +1,5 @@
 <div wire:key="reports-{{ $branch->id }}" wire:ignore
-    x-data="workspaceReports(@js(url('/workspace/report-data')), @js((string) $branch->id), @js($actor->tenant_id.'.'.$actor->id), @js(now('Asia/Kolkata')->toDateString()), @js($actor->can('reports.view')))"
+    x-data="workspaceReports(@js(url('/workspace/report-data')), @js((string) $branch->id), @js($actor->tenant_id.'.'.$actor->id), @js(now('Asia/Kolkata')->toDateString()), @js($actor->can('reports.view')), @js(url('/workspace/report-export')), @js($actor->hasRole('Owner')))"
     class="min-w-0 space-y-4">
     <section class="rounded-box border border-base-300 bg-base-100 p-4 sm:p-5" aria-label="Report filters">
         <p class="mb-3 text-sm"><strong>Active branch</strong> {{ $branch->name }} · {{ $branch->code }}</p>
@@ -26,7 +26,21 @@
                 <button class="btn btn-primary">Apply dates</button>
             </form>
         </div>
-        <p class="mt-3 text-sm text-base-content/75" x-show="report.current">Current branch position. Date filters apply to activity reports.</p>
+        <form x-show="report.historical && canUseCutoffs" class="mt-4 flex flex-wrap items-end gap-3" @submit.prevent="apply()">
+            <label class="grid gap-1 text-sm font-semibold">Effective cutoff (IST)<input type="datetime-local" class="input border-base-300! w-full" x-model="cutoffs.as_of"></label>
+            <label class="grid gap-1 text-sm font-semibold">Recorded cutoff (IST)<input type="datetime-local" class="input border-base-300! w-full" x-model="cutoffs.recorded_as_of"></label>
+            <button class="btn">Apply cutoffs</button>
+            <p class="w-full text-sm text-base-content/75">Leave blank for now. Effective cutoff selects financial activity; recorded cutoff reproduces what had been entered by then. Stock uses posting time. Gap ranges cover the first through last issued serial in the selected period.</p>
+        </form>
+        <p x-show="report.historical && !canUseCutoffs" class="mt-3 text-sm text-base-content/75">Historical purchase versions are available to the shop owner.</p>
+        <p class="mt-3 text-sm text-base-content/75" x-show="report.current && !report.historical">Current branch position. Date filters apply to activity reports.</p>
+        @can('reports.view')
+            <div x-show="selected !== 'dashboard'" class="mt-4 flex flex-wrap items-center gap-3">
+                <button type="button" class="btn" :disabled="loading || exporting" @click="download()" x-text="exporting ? 'Preparing Excel…' : 'Download Excel'"></button>
+                <span class="text-sm text-base-content/75">Amounts and identifiers are preserved as exact text.</span>
+                <p x-show="exportError" x-text="exportError" role="alert" class="w-full text-sm text-error"></p>
+            </div>
+        @endcan
         @cannot('reports.view')
             <p class="mt-3 text-sm text-base-content/75">Sales and collections recorded by your account in this branch.</p>
         @endcannot
@@ -34,9 +48,10 @@
     <section class="min-w-0 rounded-box border border-base-300 bg-base-100 p-4 sm:p-5" aria-labelledby="report-heading" :aria-busy="loading">
         <div class="mb-4 flex flex-wrap items-baseline justify-between gap-2">
             <h2 id="report-heading" class="text-xl font-bold" x-text="report.title"></h2>
-            <p class="text-sm text-base-content/75" x-show="meta.from" x-text="meta.from + ' through ' + meta.to + ' · IST'"></p>
+            <p class="text-sm text-base-content/75" x-show="meta.from && !report.current" x-text="meta.from + ' through ' + meta.to + ' · IST'"></p>
         </div>
         <p x-show="loading" role="status" class="text-sm">Loading report…</p>
+        <p class="mb-3 text-sm text-base-content/75" x-show="report.historical && meta.as_of" x-text="'Effective cutoff: ' + cutoffLabel(meta.as_of) + ' · Recorded cutoff: ' + cutoffLabel(meta.recorded_as_of) + ' · IST'"></p>
         <div x-show="error" role="alert" class="flex flex-wrap items-center gap-2 text-sm">
             <span class="text-error" x-text="error"></span>
             <button type="button" class="btn btn-sm" @click="load()">Retry</button>
@@ -48,6 +63,7 @@
                         <template x-for="[name, value, reportKey] in [
                             ['Net sales', money(data.sales.total), 'daily-sales'], ['Bills', data.sales.bills, 'sales-by-cashier'],
                             ['Stock value', money(data.stock_value), 'stock-valuation'], ['Low-stock products', data.low_stock_count, 'low-stock'],
+                            ['Stock in transit from branch', money(data.in_transit_value), 'in-transit'], ['Transfer shortages from branch', data.transfer_discrepancies, 'transfer-discrepancies'],
                             ['Customer dues', money(data.customer_dues.outstanding), 'customer-outstanding'],
                             ['Supplier dues', money(data.supplier_dues.outstanding), 'supplier-outstanding'],
                             ['Provisional gross profit', money(data.profit.gross_profit), 'profit'],

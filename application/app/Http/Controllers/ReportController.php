@@ -17,10 +17,15 @@ final class ReportController
     public const TABLES = [
         'daily-sales', 'sales-by-product', 'sales-by-cashier', 'stock-valuation', 'low-stock',
         'customer-outstanding', 'supplier-outstanding', 'payments', 'profit',
+        'transfers', 'in-transit', 'transfer-discrepancies', 'transfer-resolutions',
+        ...HistoricalReportController::REPORTS,
     ];
 
     public function show(Request $request, OperationalReports $reports, string $report): JsonResponse
     {
+        if (in_array($report, HistoricalReportController::REPORTS, true)) {
+            return app(HistoricalReportController::class)->show($request, app(\App\Services\HistoricalReports::class), $report);
+        }
         $actor = $request->user();
         $own = ! $actor->can('reports.view');
         abort_if($own && ($report !== 'daily-sales' || ! $actor->can('reports.daily_own')), 403);
@@ -64,7 +69,7 @@ final class ReportController
                 return ApiResponse::data($profit(), meta: $meta);
             }
             if ($report === 'dashboard') {
-                $key = implode(':', ['dashboard', $branch->tenant_id, $branch->id, $actor->id,
+                $key = implode(':', ['dashboard-v2', $branch->tenant_id, $branch->id, $actor->id,
                     $request->attributes->get('device')->id, $from, $to]);
                 $dashboard = Cache::remember($key, 60, fn () => [
                     'sales' => (clone $sales)->selectRaw('COALESCE(SUM(total), 0.00) AS total, COALESCE(SUM(bills), 0) AS bills')->first(),
@@ -75,11 +80,18 @@ final class ReportController
                     'supplier_dues' => $this->dues($suppliers()),
                     'top_products' => $reports->products(clone $sales)->orderByDesc('total')->orderBy('product_id')->limit(5)->get(),
                     'profit' => $profit(),
+                    'in_transit_value' => DB::query()->fromSub($reports->transfers($branch), 'transfers')->selectRaw('COALESCE(SUM(in_transit_value), 0.00) AS amount')->value('amount'),
+                    'transfer_discrepancies' => $reports->transfers($branch)->where('transfer.status', 'discrepancy')->distinct()->count('transfer.id'),
                 ]);
 
                 return ApiResponse::data($dashboard, meta: $meta + ['cache_seconds' => 60]);
             }
             $query = match ($report) {
+                'transfers' => $reports->transfers($branch)->orderByDesc('transfer.id')->orderBy('item.id'),
+                'in-transit' => $reports->transfers($branch)->whereRaw('item.qty_dispatched > item.qty_received + item.qty_recovered + item.qty_written_off')->orderByDesc('transfer.id')->orderBy('item.id'),
+                'transfer-discrepancies' => $reports->transfers($branch)->where('transfer.status', 'discrepancy')
+                    ->whereRaw('item.qty_dispatched > item.qty_received + item.qty_recovered + item.qty_written_off')->orderByDesc('transfer.id')->orderBy('item.id'),
+                'transfer-resolutions' => $reports->transferResolutions($branch, $start, $end)->orderByDesc('resolution.resolved_at')->orderByDesc('resolution.id'),
                 'daily-sales' => $this->daily($reports, $sales, $payments),
                 'sales-by-product' => $reports->products($sales)->orderByDesc('total')->orderBy('product_id'),
                 'sales-by-cashier' => $sales->leftJoin('users', 'users.id', '=', 'sales_events.cashier_id')
@@ -95,10 +107,13 @@ final class ReportController
                         'payments.status', 'purpose', 'balance_effect', 'reversal_of_id')
                     ->selectRaw('COALESCE(customers.name, suppliers.name) AS party_name')->orderByDesc('paid_at')->orderByDesc('payments.id'),
             };
-            if (in_array($report, ['stock-valuation', 'low-stock', 'customer-outstanding', 'supplier-outstanding'], true)) {
+            if (in_array($report, ['stock-valuation', 'low-stock', 'customer-outstanding', 'supplier-outstanding', 'transfers', 'in-transit', 'transfer-discrepancies'], true)) {
                 $meta = ['branch_id' => $branch->id, 'basis' => 'current'];
             }
-            $page = $query->paginate($filters['per_page'] ?? 25);
+            if (in_array($report, ['transfers', 'in-transit', 'transfer-discrepancies', 'transfer-resolutions'], true)) {
+                $meta['attribution'] = 'source_branch';
+            }
+            $page = $query->paginate($filters['per_page'] ?? 25, ['*'], 'page', (int) ($filters['page'] ?? 1));
             $items = $page->items();
             if ($report === 'daily-sales') {
                 $collections = $this->collections($payments)

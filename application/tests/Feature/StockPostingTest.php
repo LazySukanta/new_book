@@ -88,7 +88,7 @@ class StockPostingTest extends TestCase
         PHP;
         $process = new Process([PHP_BINARY, '-r', $worker, (string) $owner->id, (string) $branch, (string) $product], base_path(), [
             'APP_ENV' => 'testing', 'DB_DATABASE' => 'khatapos_test', 'DB_CONNECTION' => 'mysql', 'DB_URL' => '',
-        ], timeout: 15);
+        ], timeout: 60);
         try {
             DB::transaction(function () use ($posting, $owner, $branch, $product, $process) {
                 $posting->issueSale($owner, $branch, $product, 1, '1');

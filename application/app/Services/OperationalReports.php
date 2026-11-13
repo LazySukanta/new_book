@@ -9,6 +9,30 @@ use Illuminate\Support\Facades\DB;
 
 final class OperationalReports
 {
+    public function transfers(Branch $branch): Builder
+    {
+        return DB::table('stock_transfer_items as item')->join('stock_transfers as transfer', 'transfer.id', '=', 'item.transfer_id')
+            ->join('products as product', 'product.id', '=', 'item.product_id')
+            ->join('branches as destination', 'destination.id', '=', 'transfer.destination_branch_id')
+            ->where(['transfer.tenant_id' => $branch->tenant_id, 'transfer.source_branch_id' => $branch->id])
+            ->where('transfer.status', '!=', 'draft')
+            ->select('transfer.id as transfer_id', 'transfer.transfer_no', 'transfer.status', 'transfer.dispatched_at',
+                'destination.name as destination', 'item.product_id', 'product.name', 'product.sku', 'item.qty_dispatched',
+                'item.qty_received', 'item.qty_recovered', 'item.qty_written_off', 'item.dispatched_value', 'item.received_value', 'item.recovered_value', 'item.written_off_value')
+            ->selectRaw('item.qty_dispatched - item.qty_received - item.qty_recovered - item.qty_written_off AS unresolved_qty,
+                item.dispatched_value - item.received_value - item.recovered_value - item.written_off_value AS in_transit_value');
+    }
+
+    public function transferResolutions(Branch $branch, CarbonImmutable $start, CarbonImmutable $end): Builder
+    {
+        return DB::table('transfer_resolutions as resolution')->join('stock_transfer_items as item', 'item.id', '=', 'resolution.transfer_item_id')
+            ->join('stock_transfers as transfer', 'transfer.id', '=', 'item.transfer_id')->join('products as product', 'product.id', '=', 'item.product_id')
+            ->where(['transfer.tenant_id' => $branch->tenant_id, 'transfer.source_branch_id' => $branch->id])
+            ->where('resolution.resolved_at', '>=', $start)->where('resolution.resolved_at', '<', $end)
+            ->select('resolution.id', 'transfer.id as transfer_id', 'transfer.transfer_no', 'product.name', 'resolution.resolution',
+                'resolution.qty', 'resolution.value', 'resolution.reason', 'resolution.resolved_at');
+    }
+
     public function sales(Branch $branch, CarbonImmutable $start, CarbonImmutable $end, ?int $cashier): Builder
     {
         $events = [];
@@ -116,6 +140,11 @@ final class OperationalReports
             $events->unionAll(DB::table('sale_returns as note')->join('sales as sale', 'sale.id', '=', 'note.sale_id')
                 ->where(['sale.tenant_id' => $branch->tenant_id, 'sale.branch_id' => $branch->id, 'note.status' => 'issued'])
                 ->select('sale.customer_id as party_id')->selectRaw('-note.total AS amount'));
+        }
+        if (! $customer) {
+            $events->unionAll(DB::table('purchase_returns as returned')->join('purchases as purchase', 'purchase.id', '=', 'returned.purchase_id')
+                ->where(['purchase.tenant_id' => $branch->tenant_id, 'purchase.branch_id' => $branch->id])
+                ->select('purchase.supplier_id as party_id')->selectRaw('-returned.total AS amount'));
         }
         $balances = DB::query()->fromSub($events, 'party_events')->select('party_id')->selectRaw('SUM(amount) AS balance')->groupBy('party_id');
         $lastPayment = $this->payments($branch)->whereNotNull($party)->where('balance_effect', 'normal')->whereNull('reversal_of_id')

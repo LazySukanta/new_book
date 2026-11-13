@@ -57,6 +57,12 @@
         @elseif ($section === 'detail')
             <x-workspace.purchase-summary :snapshot="$record" />
             <x-workspace.purchase-items :snapshot="$record" caption="Current purchase lines" />
+            @if ($record['status'] === 'posted')
+                @include('purchase-return-form')
+            @endif
+            @foreach ($record['returns'] as $returned)
+                <p class="mt-3">{{ $returned['document_no'] }} · Returned ₹{{ $returned['total'] }} · Refund ₹{{ $returned['refund_amount'] }} · {{ $returned['reason'] }}</p>
+            @endforeach
         @else
             @forelse ($rows as $version)
                 <details class="mb-3 rounded-box border border-base-300 bg-base-100 p-4">

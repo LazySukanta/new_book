@@ -292,6 +292,9 @@ final class SupplierAccountPosting
             $query->where('after_json->refund_payment_id', $id)->orWhereIn('entity_id', $originatingSales);
         })->exists(), 409, 'This payment belongs to a refunded sale cancellation.');
         $allocations = $this->activeAllocations($id)->get();
+        abort_if(DB::table('purchase_returns')->where(function ($query) use ($id, $allocations) {
+            $query->where('refund_payment_id', $id)->orWhereIn('purchase_id', $allocations->pluck('purchase_id')->filter()->all());
+        })->exists(), 409, 'This payment has a supplier return dependency.');
         abort_if(DB::table('sale_returns')->where('status', 'issued')->where(function ($query) use ($id, $allocations) {
             $query->where('refund_payment_id', $id)->orWhereIn('sale_id', $allocations->pluck('sale_id')->filter()->all());
         })->exists(), 409, 'This payment has an issued credit note dependency.');
@@ -323,6 +326,8 @@ final class SupplierAccountPosting
         abort_unless($original, 404);
         abort_if($original->sale_id && DB::table('sale_returns')->where(['sale_id' => $original->sale_id, 'status' => 'issued'])->exists(),
             409, 'This allocation has an issued credit note dependency.');
+        abort_if($original->purchase_id && DB::table('purchase_returns')->where('purchase_id', $original->purchase_id)->exists(),
+            409, 'This allocation has a supplier return dependency.');
         $id = $this->allocation($request, $payment, $original->party_opening_entry_id,
             BigDecimal::of($original->amount)->negated(), CarbonImmutable::now(), $allocation, purchase: $original->purchase_id, sale: $original->sale_id);
         app(PostingAudit::class)->record($request, 'payment.unapplied', 'payment_allocation', $id, (array) $original, null, $reason);
@@ -422,14 +427,20 @@ final class SupplierAccountPosting
         ksort($events, SORT_STRING);
         $total = BigDecimal::zero();
         $allocated = BigDecimal::zero();
+        $returned = BigDecimal::zero();
+        foreach (DB::table('purchase_returns')->where('purchase_id', $purchase)->get() as $return) {
+            $events[$return->issued_at]['returns'] = (string) BigDecimal::of($events[$return->issued_at]['returns'] ?? '0.00')->plus($return->total);
+        }
+        ksort($events, SORT_STRING);
         $capacity = null;
         foreach ($events as $date => $event) {
             if (isset($event['total'])) {
                 $total = BigDecimal::of($event['total']);
             }
             $allocated = $allocated->plus($event['allocation'] ?? '0.00');
+            $returned = $returned->plus($event['returns'] ?? '0.00');
             if ($date >= $cutoff) {
-                $available = BigDecimal::max(BigDecimal::zero(), $total->minus($allocated));
+                $available = BigDecimal::max(BigDecimal::zero(), $total->minus($allocated)->minus($returned));
                 $capacity = $capacity === null ? $available : BigDecimal::min($capacity, $available);
             }
         }

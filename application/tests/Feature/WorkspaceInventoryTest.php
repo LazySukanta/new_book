@@ -9,6 +9,7 @@ use App\Services\DeviceEnrollment;
 use Database\Seeders\ShopAccessSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -33,10 +34,12 @@ final class WorkspaceInventoryTest extends TestCase
         $this->post("$root/references/tax-rates", ['name' => 'Zero', 'rate_bp' => 0])->assertRedirect();
         $product = [
             'name' => str_repeat('Long product name ', 9), 'sku' => str_repeat('SKU', 30),
-            'unit_id' => 1, 'tax_rate_id' => 1, 'tax_inclusive' => 0, 'retail_price' => '123456.70',
+            'unit_id' => DB::table('units')->where('code', 'KG')->value('id'),
+            'tax_rate_id' => DB::table('tax_rates')->where('rate_bp', 0)->value('id'),
+            'tax_inclusive' => 0, 'retail_price' => '123456.70',
             'wholesale_price' => '100000.00', 'purchase_price' => '10.00', 'reorder_level' => '2.000',
         ];
-        $this->post("$root/product", $product)->assertRedirect();
+        $this->post("$root/product", $product)->assertRedirect()->assertSessionHasNoErrors();
         $id = Product::firstOrFail()->id;
         $this->get("$root/products?search=SKU")->assertOk()->assertSee('1,23,456.70')->assertSee($product['sku']);
         $this->post("$root/product/$id", ['retail_price' => '123456.75', 'reason' => 'New season', 'manage_slabs' => 1,

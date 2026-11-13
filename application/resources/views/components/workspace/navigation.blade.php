@@ -26,6 +26,9 @@
         @can('purchases.manage')
             <li><a href="{{ route('workspace.purchases.index') }}"><x-ui.icon name="receipt" /> Purchases</a></li>
         @endcan
+        @can('stock.transfer')
+            <li><a href="{{ route('workspace.transfers') }}"><x-ui.icon name="box" /> Transfers</a></li>
+        @endcan
         @can('customers.view')
             <li><a href="{{ route('workspace.customers') }}" @class(['menu-active bg-secondary! text-secondary-content!' => $section === 'customers'])
                 @if ($section === 'customers') aria-current="page" @endif><x-ui.icon name="receipt" /> Customers</a></li>
@@ -41,5 +44,8 @@
         @can('users.manage')
             <li><a href="{{ route('workspace.admin', ['section' => 'staff']) }}"><x-ui.icon name="store" /> Administration</a></li>
         @endcan
+        @if(auth()->user()->hasRole('Owner') && auth()->user()->can('audit.view'))
+            <li><a href="{{ route('workspace.audit') }}"><x-ui.icon name="receipt" /> Audit history</a></li>
+        @endif
     </ul>
 </nav>

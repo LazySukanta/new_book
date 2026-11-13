@@ -18,10 +18,66 @@ class DeviceAuthenticationTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config(['auth.browser_pairing_required' => true]);
+    }
+
+    public function test_password_only_browser_login_and_restoring_pairing(): void
+    {
+        $this->withoutVite();
+        config(['auth.browser_pairing_required' => false]);
+        $owner = $this->owner();
+        $credentials = ['email' => $owner->email, 'password' => 'test-password-123'];
+        $this->get('/')->assertOk()->assertDontSee('Pairing code');
+        $this->postJson('/auth/login', array_replace($credentials, ['password' => 'wrong']))->assertUnauthorized();
+        $this->assertSame(0, Device::count());
+        $this->post('/sign-in', $credentials)->assertRedirect('/workspace')->assertCookie('shop_device');
+        $this->get('/workspace')->assertOk();
+        $device = Device::firstOrFail();
+        $this->assertTrue((bool) $device->password_only);
+        $this->assertSame($owner->accessibleBranches()->pluck('id')->all(), $device->branches()->pluck('branches.id')->all());
+        config(['auth.browser_pairing_required' => true]);
+        $this->get('/workspace')->assertForbidden();
+        $this->post('/sign-out')->assertRedirect('/');
+        $this->postJson('/auth/login', $credentials)->assertUnauthorized();
+        $this->get('/')->assertOk()->assertSee('Pairing code');
+        $pair = $this->pairing($owner);
+        $this->post('/sign-in', $this->credentials($owner, $pair['pairing_code']))->assertRedirect('/workspace');
+        $this->get('/workspace')->assertOk();
+    }
+
+    public function test_password_only_login_preserves_branch_scope_revocation_and_token_pairing(): void
+    {
+        config(['auth.browser_pairing_required' => false]);
+        $owner = $this->owner();
+        $branch = Branch::firstOrFail();
+        Branch::forceCreate(['tenant_id' => $owner->tenant_id, 'code' => 'B02', 'name' => 'Other branch']);
+        $staff = User::factory()->create(['tenant_id' => $owner->tenant_id, 'password' => 'test-password-123']);
+        $staff->assignRole('Cashier');
+        $staff->branches()->attach($branch->id, ['tenant_id' => $owner->tenant_id]);
+        $credentials = ['email' => $staff->email, 'password' => 'test-password-123'];
+        $this->postJson('/api/v1/auth/token', $credentials)->assertUnauthorized();
+        $response = $this->postJson('/auth/login', $credentials)->assertOk();
+        $credential = $response->getCookie('shop_device')->getValue();
+        $device = Device::firstOrFail();
+        $this->assertSame([$branch->id], $device->branches()->pluck('branches.id')->all());
+        $this->get('/workspace/admin/staff')->assertForbidden();
+        $this->postJson('/auth/logout')->assertOk();
+        $this->withCredentials()->withCookie('shop_device', $credential)->postJson('/auth/login', $credentials)->assertOk();
+        $this->assertSame(1, Device::count());
+        $device->update(['status' => 'revoked']);
+        $this->getJson('/auth/me')->assertForbidden();
+        $this->post('/sign-out')->assertRedirect('/');
+        $this->withCookie('shop_device', $credential)->postJson('/auth/login', $credentials)->assertUnauthorized();
+    }
+
     public function test_owner_registration_rejects_foreign_branches_and_derives_channel(): void
     {
         $owner = $this->owner();
         $pair = $this->pairing($owner);
+        $this->assertSame('active', json_decode(DB::table('audit_logs')->where('action', 'device.registered')->orderByDesc('id')->value('after_json'), true, flags: JSON_THROW_ON_ERROR)['status']);
         $plain = $this->postJson('/api/v1/auth/token', $this->credentials($owner, $pair['pairing_code']))->assertOk()->json('data.token');
         $headers = ['Authorization' => 'Bearer '.$plain];
         $foreignTenant = Tenant::create(['code' => 'other', 'name' => 'Other']);

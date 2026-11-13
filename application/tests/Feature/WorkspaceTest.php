@@ -12,6 +12,7 @@ use Database\Seeders\ShopAccessSeeder;
 use Database\Seeders\TradingDemoSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Livewire\Drawer\Utils;
 use Tests\TestCase;
@@ -139,7 +140,7 @@ final class WorkspaceTest extends TestCase
         $this->post('/workspace/purchases', $purchaseForm)->assertRedirect()->assertSessionHasNoErrors();
         $purchase = DB::table('purchases')->where('supplier_invoice_no', 'R1 trading day')->value('id');
         $this->assertNotNull($purchase);
-        foreach (['commercial_bill' => 'A', 'credit_note' => 'X'] as $type => $prefix) {
+        foreach (['commercial_bill' => 'A', 'credit_note' => 'X', 'purchase_return' => 'R', 'stock_transfer' => 'T'] as $type => $prefix) {
             DB::table('document_series')->insert([
                 'tenant_id' => $tenant, 'branch_id' => $branch->id, 'financial_year' => ShopCalendar::financialYear(now()),
                 'document_type' => $type, 'owning_channel' => 'web', 'prefix' => $prefix, 'rollover_order' => 1,
@@ -208,6 +209,36 @@ final class WorkspaceTest extends TestCase
         $this->getJson('/workspace/report-data/daily-sales', $headers)->assertOk()
             ->assertJsonPath('data.0.net', '70.00')->assertJsonPath('data.0.collected_by_mode.cash', '30.00')
             ->assertJsonPath('data.0.collected_by_mode.upi', '20.00');
+
+        $line = DB::table('purchase_items')->where('purchase_id', $purchase)->where('is_removed', false)->value('id');
+        $return = ['key' => (string) Str::uuid(), 'expected_revision' => 2, 'reason' => 'Damaged unit',
+            'refund_amount' => '0.00', 'refund_mode' => 'cash',
+            'items' => [['purchase_item_id' => $line, 'qty' => '1']]];
+        $this->from($detail)->post($detail.'/returns/preview', $return)->assertRedirect($detail)->assertSessionHas('purchase.return_preview');
+        $this->post($detail.'/returns', $return)->assertRedirect($detail)->assertSessionHasNoErrors();
+        $this->getJson('/workspace/party-data/suppliers/'.$supplier.'/ledger', $headers)->assertOk()->assertJsonPath('meta.balance', '20.00');
+
+        $branch->forceFill(['gstin' => '36ABCDE1234F1Z5'])->save();
+        $destination = Branch::forceCreate(['tenant_id' => $tenant, 'code' => 'B02', 'name' => 'Second counter', 'gstin' => $branch->gstin]);
+        $device->branches()->attach($destination->id, ['tenant_id' => $tenant]);
+        $actions = '/workspace/transfers/actions/';
+        $postTransfer = fn (string $action, int $branchId, array $fields): TestResponse => $this->post($actions.$action,
+            $fields + ['branch_id' => $branchId, 'key' => (string) Str::uuid()])->assertRedirect()->assertSessionHasNoErrors();
+        $postTransfer('save', $branch->id, ['destination_branch_id' => $destination->id,
+            'items' => [['product_id' => $product->id, 'qty' => '2']]]);
+        $transfer = DB::table('stock_transfers')->sole()->id;
+        $item = DB::table('stock_transfer_items')->where('transfer_id', $transfer)->value('id');
+        $postTransfer('dispatch/'.$transfer, $branch->id, ['expected_version' => 1]);
+        $postTransfer('receive/'.$transfer, $destination->id, ['expected_version' => 2,
+            'items' => [['transfer_item_id' => $item, 'qty' => '1']]]);
+        $this->getJson('/workspace/report-data/in-transit', $headers)->assertOk()->assertJsonPath('data.0.in_transit_value', '4.00');
+        $postTransfer('resolve/'.$transfer, $destination->id, ['expected_version' => 3, 'transfer_item_id' => $item,
+            'resolution' => 'written_off', 'qty' => '1', 'reason' => 'Missing in transit']);
+        $this->assertDatabaseHas('stock_balances', ['branch_id' => $branch->id, 'product_id' => $product->id, 'qty' => '0.000', 'inventory_value' => '0.00']);
+        $this->assertDatabaseHas('stock_balances', ['branch_id' => $destination->id, 'product_id' => $product->id, 'qty' => '1.000', 'inventory_value' => '4.00']);
+        $this->getJson('/workspace/report-data/transfers', $headers)->assertOk()->assertJsonPath('data.0.written_off_value', '4.00');
+        $this->getJson('/workspace/report-data/in-transit', $headers)->assertOk()->assertJsonCount(0, 'data');
+        $this->artisan('stock:reconcile')->assertSuccessful();
     }
 
     public function test_workspace_requires_a_paired_session_and_remembers_an_authorized_branch(): void

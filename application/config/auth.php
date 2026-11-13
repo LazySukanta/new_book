@@ -4,6 +4,9 @@ use App\Models\User;
 
 return [
 
+    // Temporary password-only browser login; set true to require owner pairing again.
+    'browser_pairing_required' => env('AUTH_BROWSER_PAIRING_REQUIRED', false),
+
     /*
     |--------------------------------------------------------------------------
     | Authentication Defaults

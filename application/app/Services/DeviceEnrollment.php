@@ -36,7 +36,11 @@ class DeviceEnrollment
     public function authenticate(User $user, ?string $pairingCode, ?string $credential, bool $browser): array
     {
         return DB::transaction(function () use ($user, $pairingCode, $credential, $browser) {
+            if ($browser && ! config('auth.browser_pairing_required')) {
+                return $this->authenticateWithPassword($user, $credential);
+            }
             $query = Device::where('tenant_id', $user->tenant_id)->where('status', 'active');
+            $query->where('password_only', false);
             if ($pairingCode) {
                 $query->where('pairing_hash', hash('sha256', $pairingCode))->where('pairing_expires_at', '>', now())->whereNull('paired_at');
             } elseif ($browser && $credential) {
@@ -58,5 +62,33 @@ class DeviceEnrollment
 
             return [$device, $newCredential];
         });
+    }
+
+    private function authenticateWithPassword(User $user, ?string $credential): array
+    {
+        $ids = $user->accessibleBranches()->pluck('id')->all();
+        abort_unless($ids, 403, 'No active branch is assigned to this account.');
+        $device = $credential ? Device::where('tenant_id', $user->tenant_id)
+            ->where('credential_hash', hash('sha256', $credential))->lockForUpdate()->first() : null;
+        abort_if($device && $device->status !== 'active', 401, 'Device authorization failed.');
+        $newCredential = null;
+        if (! $device || ($device->password_only && $device->registered_by !== $user->id)) {
+            $newCredential = Str::random(64);
+            $device = Device::create([
+                'tenant_id' => $user->tenant_id, 'device_uuid' => (string) Str::uuid(),
+                'name' => 'Password sign-in browser', 'platform' => 'web', 'channel' => 'web',
+                'registered_by' => $user->id, 'registered_at' => now(), 'password_only' => true,
+                'credential_hash' => hash('sha256', $newCredential),
+            ]);
+            DeviceAudit::record('device.password_enrolled', $user, $device);
+        }
+        if ($device->password_only) {
+            $device->branches()->sync(array_fill_keys($ids, ['tenant_id' => $user->tenant_id]));
+        }
+        abort_unless($user->accessibleBranches()->whereIn('id', $device->branches()->select('branches.id'))->exists(), 403);
+        $device->forceFill(['last_seen_at' => now()])->save();
+        DeviceAudit::record('device.authenticated', $user, $device);
+
+        return [$device, $newCredential];
     }
 }
